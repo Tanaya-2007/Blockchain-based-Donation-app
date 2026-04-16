@@ -74,7 +74,7 @@ export default function ProofUpload({ onToast }) {
   const statusColor = { PASS: '#34d399', WARN: '#fbbf24', FAIL: '#f87171' };
 
   return (
-    <div style={{ padding: '88px 48px 60px', minHeight: '100vh' }}>
+    <div className="mx-auto w-full max-w-[1126px] px-4 sm:px-6 lg:px-12 py-6 sm:py-8" style={{ minHeight: '100vh' }}>
       <h2 style={{
         fontFamily: "'Playfair Display', Georgia, serif",
         fontSize: '30px', fontWeight: 800, color: '#fff',
@@ -84,7 +84,7 @@ export default function ProofUpload({ onToast }) {
         AI verifies every document before funds release
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
 
         {/* Left — Milestones */}
         <div style={{ borderRadius: '18px', border: '1px solid rgba(255,255,255,0.08)', background: '#0d1021', padding: '24px' }}>

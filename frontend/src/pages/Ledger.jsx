@@ -8,9 +8,9 @@ const TYPE_STYLE = {
 
 export default function Ledger() {
   return (
-    <div style={{ padding: '88px 48px 60px', minHeight: '100vh' }}>
+    <div className="mx-auto w-full max-w-[1126px] px-4 sm:px-6 lg:px-12 py-6 sm:py-8" style={{ minHeight: '100vh' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '36px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '16px', flexWrap: 'wrap', marginBottom: '36px' }}>
         <div>
           <h2 style={{
             fontFamily: "'Playfair Display', Georgia, serif",
@@ -39,7 +39,7 @@ export default function Ledger() {
 
       {/* Stats */}
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(3,1fr)',
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
         gap: '16px', marginBottom: '28px',
       }}>
         {[

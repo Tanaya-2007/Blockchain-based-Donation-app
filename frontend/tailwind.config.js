@@ -4,7 +4,12 @@ export default {
     "./src/**/*.{js,jsx}"
   ],
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        display: ["'Playfair Display'", "Georgia", "serif"],
+        sans: ["system-ui", "'Segoe UI'", "Roboto", "sans-serif"],
+      },
+    },
   },
   plugins: [],
 }

@@ -11,7 +11,7 @@ export default function Toast({ msg, type, onHide }) {
     if (!msg) return;
     const t = setTimeout(onHide, 4000);
     return () => clearTimeout(t);
-  }, [msg]);
+  }, [msg, onHide]);
 
   if (!msg) return null;
 

@@ -17,9 +17,9 @@ export default function Campaigns({ onDonate }) {
   const shown = filter === 'all' ? campaigns : campaigns.filter(c => c.cat === filter);
 
   return (
-    <div style={{ padding: '88px 48px 60px', minHeight: '100vh' }}>
+    <div className="mx-auto w-full max-w-[1126px] px-4 sm:px-6 lg:px-12 py-6 sm:py-8" style={{ minHeight: '100vh' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '28px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '16px', flexWrap: 'wrap', marginBottom: '28px' }}>
         <div>
           <h2 style={{
             fontFamily: "'Playfair Display', Georgia, serif",
@@ -48,7 +48,7 @@ export default function Campaigns({ onDonate }) {
       {/* Cards grid */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
         gap: '20px',
       }}>
         {shown.map(c => {

@@ -12,14 +12,17 @@ const STATS = [
   { num: '46 Million', desc: 'Indian families in medical financial hardship every year' },
 ];
 
-export default function Home({ setPage, onDonate }) {
+import { useNavigate } from 'react-router-dom';
+
+export default function Home() {
+  const nav = useNavigate();
   return (
-    <div style={{ paddingTop: '68px', color: '#fff' }}>
+    <div className="mx-auto w-full max-w-[1126px] px-4 sm:px-6 lg:px-12 py-6 sm:py-8" style={{ color: '#fff' }}>
 
       {/* ── HERO ── */}
       <section style={{
         maxWidth: '900px', margin: '0 auto',
-        padding: '100px 32px 80px', textAlign: 'center',
+        padding: '80px 0 64px', textAlign: 'center',
       }}>
         {/* Badge */}
         <div style={{
@@ -68,13 +71,13 @@ export default function Home({ setPage, onDonate }) {
         </p>
 
         <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button onClick={() => setPage('campaigns')} style={{
+          <button onClick={() => nav('/campaigns')} style={{
             padding: '14px 32px', borderRadius: '12px', border: 'none',
             background: 'linear-gradient(135deg,#7c3aed,#6d28d9)',
             color: '#fff', fontWeight: 700, fontSize: '14px', cursor: 'pointer',
             boxShadow: '0 0 32px rgba(124,58,237,0.45)',
           }}>Browse Campaigns</button>
-          <button onClick={() => setPage('dashboard')} style={{
+          <button onClick={() => nav('/transparency')} style={{
             padding: '14px 32px', borderRadius: '12px',
             border: '1px solid rgba(255,255,255,0.12)',
             background: 'rgba(255,255,255,0.05)',
@@ -85,11 +88,11 @@ export default function Home({ setPage, onDonate }) {
 
       {/* ── STATS ── */}
       <div style={{
-        margin: '0 48px 80px',
+        margin: '0 0 80px',
         borderRadius: '20px',
         border: '1px solid rgba(255,255,255,0.07)',
         background: '#0d1021',
-        display: 'grid', gridTemplateColumns: 'repeat(3,1fr)',
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
         overflow: 'hidden',
       }}>
         {STATS.map((s, i) => (
@@ -100,9 +103,9 @@ export default function Home({ setPage, onDonate }) {
             <div style={{
               fontFamily: "'Playfair Display', Georgia, serif",
               fontSize: '34px', fontWeight: 800, marginBottom: '8px',
-              background: 'linear-gradient(135deg,#a78bfa,#22d3ee)',
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
+              color: '#eef2ff',
+              textShadow: '0 0 18px rgba(124,58,237,0.28)',
+              letterSpacing: '-0.5px',
             }}>{s.num}</div>
             <div style={{
               color: 'rgba(255,255,255,0.4)', fontSize: '13px',
@@ -113,7 +116,7 @@ export default function Home({ setPage, onDonate }) {
       </div>
 
       {/* ── HOW IT WORKS ── */}
-      <section style={{ padding: '0 48px 100px' }}>
+      <section style={{ padding: '0 0 100px' }}>
         <div style={{
           fontSize: '11px', fontWeight: 700, letterSpacing: '2px',
           textTransform: 'uppercase', color: '#7c3aed', marginBottom: '12px',
@@ -129,7 +132,7 @@ export default function Home({ setPage, onDonate }) {
 
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(5,1fr)',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
           gap: '1px',
           borderRadius: '20px',
           overflow: 'hidden',

@@ -15,7 +15,7 @@ const STATS = [
 
 export default function Dashboard() {
   return (
-    <div style={{ padding: '88px 48px 60px', minHeight: '100vh' }}>
+    <div className="mx-auto w-full max-w-[1126px] px-4 sm:px-6 lg:px-12 py-6 sm:py-8" style={{ minHeight: '100vh' }}>
       <h2 style={{
         fontFamily: "'Playfair Display', Georgia, serif",
         fontSize: '30px', fontWeight: 800, color: '#fff',
@@ -27,7 +27,7 @@ export default function Dashboard() {
 
       {/* Stat cards */}
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(4,1fr)',
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
         gap: '16px', marginBottom: '28px',
       }}>
         {STATS.map(s => (
