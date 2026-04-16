@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../auth/useAuth';
+import { db } from '../firebase';
 
 export default function DonorDashboard() {
   const { user, role } = useAuth();
@@ -24,6 +26,38 @@ export default function DonorDashboard() {
           </Link>
         </div>
       </div>
+
+      {role !== 'ngo' && (
+        <div className="mt-6 rounded-[18px] border border-white/10 bg-[#0d1021] p-6 text-left">
+          <div className="text-[12px] font-bold tracking-[2px] text-white/40 uppercase mb-2">
+            NGO access
+          </div>
+          <div className="text-white/50 text-[13px] leading-relaxed">
+            If you’re an NGO, request access to create and manage donation campaigns. Admin will review your request.
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2.5">
+            <button
+              className="inline-flex items-center justify-center rounded-[12px] bg-white/5 border border-white/15 px-4 py-3 text-[13px] font-bold text-white/90 hover:bg-white/10 transition"
+              onClick={async () => {
+                if (!user) return;
+                await addDoc(collection(db, 'ngoRequests'), {
+                  uid: user.uid,
+                  email: user.email || '',
+                  name: user.displayName || '',
+                  status: 'pending',
+                  createdAt: serverTimestamp(),
+                });
+                alert('NGO access request submitted. An admin will review it.');
+              }}
+            >
+              Request NGO access
+            </button>
+          </div>
+          <div className="mt-3 text-[12px] text-white/35">
+            Tip: After approval, refresh the page (or sign out/in) to see the NGO dashboard link.
+          </div>
+        </div>
+      )}
     </div>
   );
 }

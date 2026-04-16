@@ -4,9 +4,19 @@ import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
 import { AuthContext } from './AuthContext';
 
+function isAdminEmail(email) {
+  const raw = import.meta.env.VITE_ADMIN_EMAILS || '';
+  const list = raw
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  return !!email && list.includes(String(email).toLowerCase());
+}
+
 async function upsertUserDoc(firebaseUser) {
   const ref = doc(db, 'users', firebaseUser.uid);
   const snap = await getDoc(ref);
+  const adminByEmail = isAdminEmail(firebaseUser.email);
 
   if (!snap.exists()) {
     await setDoc(
@@ -15,18 +25,23 @@ async function upsertUserDoc(firebaseUser) {
         name: firebaseUser.displayName || '',
         email: firebaseUser.email || '',
         photoURL: firebaseUser.photoURL || '',
-        role: 'donor',
+        role: adminByEmail ? 'admin' : 'donor',
         createdAt: serverTimestamp(),
         lastLoginAt: serverTimestamp(),
       },
       { merge: true }
     );
-    return { role: 'donor' };
+    return { role: adminByEmail ? 'admin' : 'donor' };
   }
 
   const data = snap.data() || {};
+  const existingRole = data.role || 'donor';
+  const nextRole = adminByEmail ? 'admin' : existingRole;
   await setDoc(ref, { lastLoginAt: serverTimestamp() }, { merge: true });
-  return { role: data.role || 'donor' };
+  if (nextRole !== existingRole) {
+    await setDoc(ref, { role: nextRole }, { merge: true });
+  }
+  return { role: nextRole };
 }
 
 export function AuthProvider({ children }) {
