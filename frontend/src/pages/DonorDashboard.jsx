@@ -1,72 +1,154 @@
 import { Link } from 'react-router-dom';
-import { addDoc, collection, getDocs, limit, query, serverTimestamp, where } from 'firebase/firestore';
 import { useAuth } from '../auth/useAuth';
-import { db } from '../firebase';
+
+const ROLE_LABELS = {
+  donor:       { label: 'Donor',        color: '#a78bfa', icon: '🙋' },
+  ngo:         { label: 'Organization', color: '#67e8f9', icon: '🏥' },
+  pending_ngo: { label: 'Pending Approval', color: '#fcd34d', icon: '⏳' },
+  admin:       { label: 'Admin',        color: '#fcd34d', icon: '🛡️' },
+};
 
 export default function DonorDashboard() {
   const { user, role } = useAuth();
-  return (
-    <div className="mx-auto w-full max-w-[1126px] px-4 sm:px-6 lg:px-12 py-8">
-      <div className="mb-2 text-[11px] font-bold tracking-[2px] text-violet-500 uppercase">Account</div>
-      <h2 className="mb-2 font-display text-[30px] font-extrabold tracking-[-0.5px] text-white">Donor dashboard</h2>
-      <p className="mb-5 text-white/50">
-        Signed in as <strong>{user?.email}</strong> · role: <strong>{role || 'donor'}</strong>
-      </p>
+  const meta = ROLE_LABELS[role] || ROLE_LABELS.donor;
 
-      <div className="rounded-[18px] border border-white/10 bg-[#0d1021] p-6 text-left">
-        <div className="text-[13px] leading-relaxed text-white/50">
-          Next: show your donations, saved campaigns, and receipts here.
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2.5">
-          <Link className="inline-flex items-center justify-center rounded-[12px] bg-gradient-to-br from-violet-600 to-violet-800 px-4 py-3 text-[13px] font-bold text-white" to="/campaigns">
-            Browse campaigns
-          </Link>
-          <Link className="inline-flex items-center justify-center rounded-[12px] border border-white/15 bg-white/5 px-4 py-3 text-[13px] font-bold text-white/90" to="/">
-            Back to home
-          </Link>
+  return (
+    <div style={{
+      maxWidth: '1126px', margin: '0 auto',
+      padding: '40px 24px',
+    }}>
+
+      {/* Profile card */}
+      <div style={{
+        borderRadius: '20px', border: '1px solid rgba(255,255,255,0.08)',
+        background: '#0d1021', padding: '32px', marginBottom: '24px',
+        display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap',
+      }}>
+        {user?.photoURL && (
+          <img src={user.photoURL} alt="avatar"
+            style={{ width: '60px', height: '60px', borderRadius: '50%', border: '2px solid rgba(124,58,237,0.5)' }} />
+        )}
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '22px', fontWeight: 800, color: '#fff', marginBottom: '4px',
+                        fontFamily: "'Playfair Display', Georgia, serif" }}>
+            {user?.displayName || 'Welcome'}
+          </div>
+          <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginBottom: '10px' }}>
+            {user?.email}
+          </div>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            padding: '5px 14px', borderRadius: '999px', fontSize: '12px', fontWeight: 700,
+            border: `1px solid ${meta.color}40`,
+            background: `${meta.color}15`,
+            color: meta.color,
+          }}>
+            {meta.icon} {meta.label}
+          </span>
         </div>
       </div>
 
-      {role !== 'ngo' && (
-        <div className="mt-6 rounded-[18px] border border-white/10 bg-[#0d1021] p-6 text-left">
-          <div className="text-[12px] font-bold tracking-[2px] text-white/40 uppercase mb-2">
-            NGO access
+      {/* ── PENDING NGO — waiting for approval ── */}
+      {role === 'pending_ngo' && (
+        <div style={{
+          borderRadius: '20px', padding: '28px 32px', marginBottom: '24px',
+          border: '1px solid rgba(245,158,11,0.35)',
+          background: 'rgba(245,158,11,0.08)',
+        }}>
+          <div style={{ fontSize: '18px', fontWeight: 700, color: '#fcd34d', marginBottom: '10px',
+                        fontFamily: "'Playfair Display', Georgia, serif" }}>
+            ⏳ Organization Access Pending
           </div>
-          <div className="text-white/50 text-[13px] leading-relaxed">
-            If you’re an NGO, request access to create and manage donation campaigns. Admin will review your request.
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2.5">
-            <button
-              className="inline-flex items-center justify-center rounded-[12px] bg-white/5 border border-white/15 px-4 py-3 text-[13px] font-bold text-white/90 hover:bg-white/10 transition"
-              onClick={async () => {
-                if (!user) return;
-                const existing = await getDocs(
-                  query(collection(db, 'ngoRequests'), where('uid', '==', user.uid), limit(25))
-                );
-                const hasPending = existing.docs.some((d) => (d.data()?.status || '') === 'pending');
-                if (hasPending) {
-                  alert('You already have a pending NGO request.');
-                  return;
-                }
-                await addDoc(collection(db, 'ngoRequests'), {
-                  uid: user.uid,
-                  email: user.email || '',
-                  name: user.displayName || '',
-                  status: 'pending',
-                  createdAt: serverTimestamp(),
-                });
-                alert('NGO access request submitted. An admin will review it.');
-              }}
-            >
-              Request NGO access
-            </button>
-          </div>
-          <div className="mt-3 text-[12px] text-white/35">
-            Tip: After approval, refresh the page (or sign out/in) to see the NGO dashboard link.
+          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px', lineHeight: 1.7, marginBottom: '16px' }}>
+            Your organization account request has been submitted and is waiting for admin approval.
+            Once approved, you will have access to create and manage donation campaigns.
+          </p>
+          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.3)' }}>
+            Tip: Sign out and sign back in after approval to see your Organization dashboard.
           </div>
         </div>
       )}
+
+      {/* ── APPROVED NGO ── */}
+      {role === 'ngo' && (
+        <div style={{
+          borderRadius: '20px', padding: '28px 32px', marginBottom: '24px',
+          border: '1px solid rgba(34,211,238,0.35)',
+          background: 'rgba(34,211,238,0.06)',
+        }}>
+          <div style={{ fontSize: '18px', fontWeight: 700, color: '#67e8f9', marginBottom: '10px',
+                        fontFamily: "'Playfair Display', Georgia, serif" }}>
+            🏥 Organization Dashboard
+          </div>
+          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px', lineHeight: 1.7, marginBottom: '20px' }}>
+            Your organization is approved. You can create campaigns, upload milestone proofs, and manage fund releases.
+          </p>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <Link to="/ngo" style={{
+              padding: '12px 24px', borderRadius: '12px', fontWeight: 700, fontSize: '13px',
+              background: 'linear-gradient(135deg,#0891b2,#22d3ee)', color: '#fff',
+              textDecoration: 'none',
+            }}>Go to NGO Dashboard</Link>
+            <Link to="/proof" style={{
+              padding: '12px 24px', borderRadius: '12px', fontWeight: 700, fontSize: '13px',
+              border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', color: '#fff',
+              textDecoration: 'none',
+            }}>Upload Proof</Link>
+          </div>
+        </div>
+      )}
+
+      {/* ── DONOR ── */}
+      {role === 'donor' && (
+        <div style={{
+          borderRadius: '20px', border: '1px solid rgba(255,255,255,0.08)',
+          background: '#0d1021', padding: '28px 32px', marginBottom: '24px',
+        }}>
+          <div style={{ fontSize: '18px', fontWeight: 700, color: '#fff', marginBottom: '10px',
+                        fontFamily: "'Playfair Display', Georgia, serif" }}>
+            🙋 Your Donations
+          </div>
+          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', lineHeight: 1.7, marginBottom: '20px' }}>
+            Track your donations, view campaign updates, and see exactly where every rupee went.
+          </p>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <Link to="/campaigns" style={{
+              padding: '12px 24px', borderRadius: '12px', fontWeight: 700, fontSize: '13px',
+              background: 'linear-gradient(135deg,#7c3aed,#0891b2)', color: '#fff',
+              textDecoration: 'none',
+            }}>Browse Campaigns</Link>
+            <Link to="/transparency" style={{
+              padding: '12px 24px', borderRadius: '12px', fontWeight: 700, fontSize: '13px',
+              border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', color: '#fff',
+              textDecoration: 'none',
+            }}>View Transparency</Link>
+          </div>
+        </div>
+      )}
+
+      {/* ── ADMIN ── */}
+      {role === 'admin' && (
+        <div style={{
+          borderRadius: '20px', padding: '28px 32px', marginBottom: '24px',
+          border: '1px solid rgba(245,158,11,0.35)',
+          background: 'rgba(245,158,11,0.06)',
+        }}>
+          <div style={{ fontSize: '18px', fontWeight: 700, color: '#fcd34d', marginBottom: '10px',
+                        fontFamily: "'Playfair Display', Georgia, serif" }}>
+            🛡️ Admin Access
+          </div>
+          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px', lineHeight: 1.7, marginBottom: '20px' }}>
+            You have full admin access. Approve NGO requests, manage campaigns, and oversee the platform.
+          </p>
+          <Link to="/admin" style={{
+            display: 'inline-block', padding: '12px 24px', borderRadius: '12px',
+            fontWeight: 700, fontSize: '13px',
+            background: 'linear-gradient(135deg,#d97706,#f59e0b)', color: '#fff',
+            textDecoration: 'none',
+          }}>Go to Admin Panel</Link>
+        </div>
+      )}
+
     </div>
   );
 }
-
