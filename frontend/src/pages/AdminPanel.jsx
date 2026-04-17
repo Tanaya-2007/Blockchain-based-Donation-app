@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { collection, doc, getDocs, orderBy, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { collection, doc, getDocs, limit, query, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
 export default function AdminPanel() {
@@ -13,15 +13,20 @@ export default function AdminPanel() {
     setErr('');
     setLoading(true);
     try {
-      const q = query(
-        collection(db, 'ngoRequests'),
-        where('status', 'in', ['pending', 'approved', 'rejected']),
-        orderBy('createdAt', 'desc')
-      );
+      // Avoid composite indexes + avoid requiring `createdAt` on every doc.
+      const q = query(collection(db, 'ngoRequests'), limit(200));
       const snap = await getDocs(q);
-      setRows(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      const mapped = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      mapped.sort((a, b) => {
+        const ta = a.createdAt?.toMillis?.() ?? 0;
+        const tb = b.createdAt?.toMillis?.() ?? 0;
+        return tb - ta;
+      });
+      setRows(mapped);
     } catch {
-      setErr('Failed to load NGO requests. Check Firestore rules / indexes.');
+      setErr(
+        'Failed to load NGO requests. This is usually Firestore security rules (missing read permission for admins).'
+      );
     } finally {
       setLoading(false);
     }

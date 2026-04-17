@@ -22,7 +22,7 @@ export default function Navbar({ onDonate }) {
 
   return (
     <nav className="fixed inset-x-0 top-0 z-[100] h-[68px] border-b border-white/5 bg-[rgba(8,10,22,0.92)] backdrop-blur-xl">
-      <div className="mx-auto flex h-full w-full max-w-[1126px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-12">
+      <div className="flex h-full w-full items-center justify-between gap-3 px-4 sm:px-6 lg:px-10">
         <button
           className="inline-flex items-center gap-2.5 bg-transparent p-0 text-left"
           onClick={() => { setOpen(false); nav('/'); }}
@@ -36,9 +36,9 @@ export default function Navbar({ onDonate }) {
           </span>
         </button>
 
-        <div className="flex items-center gap-2.5">
+        <div className="ml-auto flex items-center gap-2.5">
           {/* Desktop links */}
-          <div className="hidden items-center gap-1 lg:flex">
+          <div className="hidden items-center gap-1 lg:flex lg:mr-2">
             {links.map((l) => (
               <NavLink
                 key={l.to}
@@ -99,9 +99,9 @@ export default function Navbar({ onDonate }) {
 
       {/* Mobile sheet */}
       {open && (
-        <div className="fixed inset-0 z-[120] bg-black/55 lg:hidden" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-[120] bg-[#050812] lg:hidden" onClick={() => setOpen(false)}>
           <div
-            className="absolute right-3 top-[78px] w-[min(92vw,360px)] overflow-hidden rounded-[18px] border border-white/10 bg-[rgba(13,16,33,0.92)] shadow-[0_18px_60px_rgba(0,0,0,0.65)] backdrop-blur-xl"
+            className="absolute right-3 top-[78px] w-[min(92vw,360px)] overflow-hidden rounded-[18px] border border-white/10 bg-[#0d1021] shadow-[0_18px_60px_rgba(0,0,0,0.65)]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="grid gap-0.5 p-2.5">

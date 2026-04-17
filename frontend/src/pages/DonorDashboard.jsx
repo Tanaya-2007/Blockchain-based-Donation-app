@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, getDocs, limit, query, serverTimestamp, where } from 'firebase/firestore';
 import { useAuth } from '../auth/useAuth';
 import { db } from '../firebase';
 
@@ -40,6 +40,14 @@ export default function DonorDashboard() {
               className="inline-flex items-center justify-center rounded-[12px] bg-white/5 border border-white/15 px-4 py-3 text-[13px] font-bold text-white/90 hover:bg-white/10 transition"
               onClick={async () => {
                 if (!user) return;
+                const existing = await getDocs(
+                  query(collection(db, 'ngoRequests'), where('uid', '==', user.uid), limit(25))
+                );
+                const hasPending = existing.docs.some((d) => (d.data()?.status || '') === 'pending');
+                if (hasPending) {
+                  alert('You already have a pending NGO request.');
+                  return;
+                }
                 await addDoc(collection(db, 'ngoRequests'), {
                   uid: user.uid,
                   email: user.email || '',
