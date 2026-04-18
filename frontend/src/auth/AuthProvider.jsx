@@ -4,91 +4,76 @@ import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
 import { AuthContext } from './AuthContext';
 
-// ── Helpers ────────────────────────────────────────────────
 function isAdminEmail(email) {
-  const raw = import.meta.env.VITE_ADMIN_EMAILS || '';
+  const raw  = import.meta.env.VITE_ADMIN_EMAILS || '';
   const list = raw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   return !!email && list.includes(String(email).toLowerCase());
 }
 
-function getRoleHint() {
+function consumeRoleHint() {
   try {
-    const hint = sessionStorage.getItem('tf_role_hint');
-    sessionStorage.removeItem('tf_role_hint'); // consume once
-    return hint || 'donor';
-  } catch {
-    return 'donor';
-  }
+    const h = sessionStorage.getItem('tf_role_hint') || 'donor';
+    sessionStorage.removeItem('tf_role_hint');
+    return h;
+  } catch { return 'donor'; }
 }
 
 async function upsertUserDoc(firebaseUser) {
   const ref  = doc(db, 'users', firebaseUser.uid);
   const snap = await getDoc(ref);
-  const adminByEmail = isAdminEmail(firebaseUser.email);
+
+  // Admin email always wins
+  if (isAdminEmail(firebaseUser.email)) {
+    const role = 'admin';
+    await setDoc(ref, {
+      name: firebaseUser.displayName || '',
+      email: firebaseUser.email || '',
+      photoURL: firebaseUser.photoURL || '',
+      role,
+      lastLoginAt: serverTimestamp(),
+      ...(snap.exists() ? {} : { createdAt: serverTimestamp() }),
+    }, { merge: true });
+    return role;
+  }
 
   if (!snap.exists()) {
-    // ── NEW USER — use role hint from login page ──
-    const hint = getRoleHint();
-
-    // Admin email always wins regardless of hint
-    // Organization hint → set role to 'pending_ngo' so admin can approve
-    // donor hint → donor
-    let assignedRole;
-    if (adminByEmail) {
-      assignedRole = 'admin';
-    } else if (hint === 'ngo') {
-      assignedRole = 'pending_ngo'; // needs admin approval to become 'ngo'
-    } else {
-      assignedRole = 'donor';
-    }
-
+    // NEW USER — use the role they selected on the login page
+    const hint = consumeRoleHint();               // 'donor' | 'ngo' | 'admin'
+    const role = hint === 'ngo' ? 'ngo' : 'donor'; // admin only via email list
     await setDoc(ref, {
       name:        firebaseUser.displayName || '',
       email:       firebaseUser.email       || '',
       photoURL:    firebaseUser.photoURL    || '',
-      role:        assignedRole,
-      roleHint:    hint,
+      role,
       createdAt:   serverTimestamp(),
       lastLoginAt: serverTimestamp(),
     });
-
-    return { role: assignedRole };
+    return role;
   }
 
-  // ── EXISTING USER — role is already set in Firestore ──
-  const data         = snap.data() || {};
-  const existingRole = data.role   || 'donor';
-
-  // If they were admin by email before but role wasn't set, fix it
-  const nextRole = adminByEmail ? 'admin' : existingRole;
-
+  // RETURNING USER — respect existing role in Firestore
+  const role = snap.data()?.role || 'donor';
   await setDoc(ref, { lastLoginAt: serverTimestamp() }, { merge: true });
-  if (nextRole !== existingRole) {
-    await setDoc(ref, { role: nextRole }, { merge: true });
-  }
-
-  return { role: nextRole };
+  return role;
 }
 
-// ── Provider ───────────────────────────────────────────────
 export function AuthProvider({ children }) {
   const [user,    setUser]    = useState(null);
   const [role,    setRole]    = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async u => {
+    return onAuthStateChanged(auth, async u => {
       setLoading(true);
       try {
         if (!u) { setUser(null); setRole(null); return; }
         setUser(u);
-        const { role: r } = await upsertUserDoc(u);
+        const r = await upsertUserDoc(u);
         setRole(r);
       } finally {
         setLoading(false);
       }
     });
-    return () => unsub();
   }, []);
 
   const value = useMemo(() => ({

@@ -41,25 +41,33 @@ export default function Login() {
   const [error,        setError]        = useState('');
   const [loading,      setLoading]      = useState(false);
 
-  // Once auth resolves, redirect to the right dashboard
   useEffect(() => {
     if (!user || !role) return;
+
+    // Respect protected-route "from" redirect
     const from = loc.state?.from;
     if (from && from !== '/login') { nav(from, { replace: true }); return; }
-    if (role === 'admin') nav('/admin',   { replace: true });
-    else if (role === 'ngo') nav('/ngo', { replace: true });
-    else nav('/account',                 { replace: true });
-  }, [user, role]);
+
+    // Always route by ACTUAL Firestore role first — cannot be overridden by selection
+    if (role === 'admin') { nav('/admin', { replace: true }); return; }
+    if (role === 'ngo')   { nav('/ngo',   { replace: true }); return; }
+
+    // Actual role is donor:
+    // If they selected Organization → send to /ngo to fill registration form
+    if (selectedRole === 'ngo') { nav('/ngo', { replace: true }); return; }
+
+    // Otherwise → homepage, donors don't have a special dashboard
+    nav('/', { replace: true });
+
+  }, [user, role, selectedRole]); // ← selectedRole in deps fixes stale-closure bug
 
   const handleSignIn = async () => {
     setError('');
     setLoading(true);
     try {
-      // Pass selected role hint to AuthProvider via sessionStorage
-      // AuthProvider will read this when creating a NEW user doc
       sessionStorage.setItem('tf_role_hint', selectedRole);
       await signInWithGoogle();
-    } catch (e) {
+    } catch {
       setError('Sign in failed. Please try again.');
     } finally {
       setLoading(false);
@@ -76,7 +84,6 @@ export default function Login() {
     }}>
       <div style={{ width: '100%', maxWidth: '520px' }}>
 
-        {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '36px' }}>
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: '8px',
@@ -98,71 +105,51 @@ export default function Login() {
           </p>
         </div>
 
-        {/* Role selector */}
+        {/* Role cards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '28px' }}>
           {ROLES.map(r => (
-            <button
-              key={r.key}
-              onClick={() => setSelectedRole(r.key)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '16px',
-                padding: '18px 20px', borderRadius: '16px', cursor: 'pointer',
-                border: selectedRole === r.key ? `1px solid ${r.border}` : '1px solid rgba(255,255,255,0.08)',
-                background: selectedRole === r.key ? r.bg : 'rgba(255,255,255,0.03)',
-                transition: 'all 0.2s', textAlign: 'left',
-                outline: 'none',
-              }}
-            >
-              {/* Radio */}
+            <button key={r.key} onClick={() => setSelectedRole(r.key)} style={{
+              display: 'flex', alignItems: 'center', gap: '16px',
+              padding: '18px 20px', borderRadius: '16px', cursor: 'pointer',
+              border: selectedRole === r.key
+                ? `1px solid ${r.border}` : '1px solid rgba(255,255,255,0.08)',
+              background: selectedRole === r.key ? r.bg : 'rgba(255,255,255,0.03)',
+              transition: 'all 0.2s', textAlign: 'left', outline: 'none',
+            }}>
               <div style={{
                 width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0,
-                border: selectedRole === r.key ? `2px solid ${r.color}` : '2px solid rgba(255,255,255,0.2)',
+                border: selectedRole === r.key
+                  ? `2px solid ${r.color}` : '2px solid rgba(255,255,255,0.2)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 transition: 'all 0.2s',
               }}>
                 {selectedRole === r.key && (
-                  <div style={{
-                    width: '10px', height: '10px', borderRadius: '50%',
-                    background: r.color,
-                  }} />
+                  <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: r.color }} />
                 )}
               </div>
-
-              {/* Icon */}
               <div style={{
                 width: '44px', height: '44px', borderRadius: '12px',
                 border: `1px solid ${selectedRole === r.key ? r.border : 'rgba(255,255,255,0.08)'}`,
                 background: selectedRole === r.key ? r.bg : 'rgba(255,255,255,0.04)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '22px', flexShrink: 0,
-                transition: 'all 0.2s',
-              }}>
-                {r.icon}
-              </div>
-
-              {/* Text */}
+                fontSize: '22px', flexShrink: 0, transition: 'all 0.2s',
+              }}>{r.icon}</div>
               <div style={{ flex: 1 }}>
                 <div style={{
                   fontSize: '15px', fontWeight: 700,
                   color: selectedRole === r.key ? '#fff' : 'rgba(255,255,255,0.7)',
                   marginBottom: '4px',
                   fontFamily: "'Playfair Display', Georgia, serif",
-                }}>
-                  {r.title}
-                </div>
+                }}>{r.title}</div>
                 <div style={{
-                  fontSize: '12px',
+                  fontSize: '12px', lineHeight: 1.5,
                   color: selectedRole === r.key ? r.color : 'rgba(255,255,255,0.3)',
-                  lineHeight: 1.5,
-                }}>
-                  {r.desc}
-                </div>
+                }}>{r.desc}</div>
               </div>
             </button>
           ))}
         </div>
 
-        {/* Admin note */}
         {selectedRole === 'admin' && (
           <div style={{
             padding: '14px 18px', borderRadius: '12px', marginBottom: '20px',
@@ -170,23 +157,27 @@ export default function Login() {
             background: 'rgba(245,158,11,0.08)',
             fontSize: '13px', color: '#fcd34d', lineHeight: 1.6,
           }}>
-            ⚠️ Admin access is only granted if your Google account email matches the pre-approved admin list. Otherwise you will be redirected to the donor dashboard.
+            ⚠️ Admin access is only granted if your email matches the pre-approved admin list.
+            Otherwise you will be redirected to the homepage.
           </div>
         )}
 
-        {/* Sign in button */}
-        <button
-          onClick={handleSignIn}
-          disabled={loading}
-          style={{
-            width: '100%', padding: '16px', borderRadius: '14px', border: 'none',
-            background: loading ? 'rgba(124,58,237,0.5)' : `linear-gradient(135deg, ${chosen.border.replace('0.5','1')}, rgba(8,145,178,0.9))`,
-            color: '#fff', fontWeight: 700, fontSize: '15px', cursor: loading ? 'not-allowed' : 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
-            boxShadow: '0 0 28px rgba(124,58,237,0.35)',
-            transition: 'all 0.2s',
-          }}
-        >
+        {error && (
+          <div style={{
+            padding: '12px 16px', borderRadius: '10px', marginBottom: '16px',
+            border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.1)',
+            fontSize: '13px', color: '#fca5a5',
+          }}>{error}</div>
+        )}
+
+        <button onClick={handleSignIn} disabled={loading} style={{
+          width: '100%', padding: '16px', borderRadius: '14px', border: 'none',
+          background: loading ? 'rgba(124,58,237,0.5)' : '#7c3aed',
+          color: '#fff', fontWeight: 700, fontSize: '15px',
+          cursor: loading ? 'not-allowed' : 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+          boxShadow: '0 0 28px rgba(124,58,237,0.35)', transition: 'all 0.2s',
+        }}>
           {loading ? (
             <>
               <span style={{
@@ -210,22 +201,13 @@ export default function Login() {
           )}
         </button>
 
-        {error && (
-          <div style={{
-            marginTop: '12px', padding: '12px 16px', borderRadius: '10px',
-            border: '1px solid rgba(239,68,68,0.4)',
-            background: 'rgba(239,68,68,0.1)',
-            fontSize: '13px', color: '#fca5a5',
-          }}>
-            {error}
-          </div>
-        )}
-
-        <p style={{ textAlign: 'center', marginTop: '20px', fontSize: '12px', color: 'rgba(255,255,255,0.25)' }}>
-          Organization access requires admin approval after sign-in.
+        <p style={{
+          textAlign: 'center', marginTop: '20px',
+          fontSize: '12px', color: 'rgba(255,255,255,0.25)',
+        }}>
+          Organization access requires submitting details and admin approval.
         </p>
       </div>
-
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );

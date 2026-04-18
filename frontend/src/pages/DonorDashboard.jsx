@@ -1,154 +1,184 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import {
+  addDoc, collection, getDocs,
+  limit, query, serverTimestamp, where,
+} from 'firebase/firestore';
 import { useAuth } from '../auth/useAuth';
+import { db } from '../firebase';
 
-const ROLE_LABELS = {
-  donor:       { label: 'Donor',        color: '#a78bfa', icon: '🙋' },
-  ngo:         { label: 'Organization', color: '#67e8f9', icon: '🏥' },
-  pending_ngo: { label: 'Pending Approval', color: '#fcd34d', icon: '⏳' },
-  admin:       { label: 'Admin',        color: '#fcd34d', icon: '🛡️' },
+const ROLE_META = {
+  admin: { label: 'Admin',     icon: '🛡️', color: '#fcd34d', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.35)' },
+  ngo:   { label: 'NGO',       icon: '🏥', color: '#6ee7b7', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.35)' },
+  donor: { label: 'Donor',     icon: '💳', color: '#c4b5fd', bg: 'rgba(124,58,237,0.12)', border: 'rgba(124,58,237,0.35)' },
 };
 
 export default function DonorDashboard() {
   const { user, role } = useAuth();
-  const meta = ROLE_LABELS[role] || ROLE_LABELS.donor;
+  const [reqSent, setReqSent] = useState(false);
+  const meta = ROLE_META[role] || ROLE_META.donor;
+
+  const requestNgoAccess = async () => {
+    if (!user) return;
+    const existing = await getDocs(
+      query(collection(db, 'ngoRequests'), where('uid', '==', user.uid), limit(5))
+    );
+    const hasPending = existing.docs.some(d => d.data()?.status === 'pending');
+    if (hasPending) { alert('You already have a pending request.'); return; }
+    await addDoc(collection(db, 'ngoRequests'), {
+      uid: user.uid, email: user.email || '',
+      name: user.displayName || '', photoURL: user.photoURL || '',
+      status: 'pending', createdAt: serverTimestamp(),
+    });
+    setReqSent(true);
+  };
 
   return (
-    <div style={{
-      maxWidth: '1126px', margin: '0 auto',
-      padding: '40px 24px',
-    }}>
+    <div style={{ padding: '40px 48px', maxWidth: '720px' }}>
 
-      {/* Profile card */}
+      {/* ── Profile card ── */}
       <div style={{
         borderRadius: '20px', border: '1px solid rgba(255,255,255,0.08)',
-        background: '#0d1021', padding: '32px', marginBottom: '24px',
-        display: 'flex', alignItems: 'center', gap: '20px', flexWrap: 'wrap',
+        background: '#0d1021', padding: '28px',
+        display: 'flex', alignItems: 'center', gap: '20px',
+        marginBottom: '20px',
       }}>
-        {user?.photoURL && (
-          <img src={user.photoURL} alt="avatar"
-            style={{ width: '60px', height: '60px', borderRadius: '50%', border: '2px solid rgba(124,58,237,0.5)' }} />
+        {/* Google avatar */}
+        {user?.photoURL ? (
+          <img
+            src={user.photoURL}
+            alt={user.displayName || 'avatar'}
+            referrerPolicy="no-referrer"
+            style={{
+              width: '64px', height: '64px', borderRadius: '50%',
+              objectFit: 'cover', flexShrink: 0,
+              border: `2px solid ${meta.border}`,
+            }}
+          />
+        ) : (
+          <div style={{
+            width: '64px', height: '64px', borderRadius: '50%', flexShrink: 0,
+            background: 'linear-gradient(135deg,#7c3aed,#0891b2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '26px', fontWeight: 800, color: '#fff',
+            border: `2px solid ${meta.border}`,
+          }}>
+            {(user?.displayName?.[0] || user?.email?.[0] || '?').toUpperCase()}
+          </div>
         )}
+
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: '22px', fontWeight: 800, color: '#fff', marginBottom: '4px',
-                        fontFamily: "'Playfair Display', Georgia, serif" }}>
-            {user?.displayName || 'Welcome'}
+          <div style={{
+            fontFamily: "'Playfair Display', Georgia, serif",
+            fontSize: '22px', fontWeight: 800, color: '#fff', marginBottom: '4px',
+          }}>
+            {user?.displayName || 'User'}
           </div>
           <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginBottom: '10px' }}>
             {user?.email}
           </div>
+          {/* Role pill */}
           <span style={{
             display: 'inline-flex', alignItems: 'center', gap: '6px',
-            padding: '5px 14px', borderRadius: '999px', fontSize: '12px', fontWeight: 700,
-            border: `1px solid ${meta.color}40`,
-            background: `${meta.color}15`,
-            color: meta.color,
+            padding: '4px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 700,
+            background: meta.bg, border: `1px solid ${meta.border}`, color: meta.color,
           }}>
             {meta.icon} {meta.label}
           </span>
         </div>
+
+        {/* Quick links by role */}
+        {role === 'admin' && (
+          <Link to="/admin" style={{
+            padding: '10px 20px', borderRadius: '10px',
+            background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.35)',
+            color: '#fcd34d', fontWeight: 700, fontSize: '13px', textDecoration: 'none',
+          }}>
+            🛡️ Admin Panel →
+          </Link>
+        )}
+        {role === 'ngo' && (
+          <Link to="/ngo" style={{
+            padding: '10px 20px', borderRadius: '10px',
+            background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)',
+            color: '#6ee7b7', fontWeight: 700, fontSize: '13px', textDecoration: 'none',
+          }}>
+            🏥 NGO Dashboard →
+          </Link>
+        )}
       </div>
 
-      {/* ── PENDING NGO — waiting for approval ── */}
-      {role === 'pending_ngo' && (
-        <div style={{
-          borderRadius: '20px', padding: '28px 32px', marginBottom: '24px',
-          border: '1px solid rgba(245,158,11,0.35)',
-          background: 'rgba(245,158,11,0.08)',
-        }}>
-          <div style={{ fontSize: '18px', fontWeight: 700, color: '#fcd34d', marginBottom: '10px',
-                        fontFamily: "'Playfair Display', Georgia, serif" }}>
-            ⏳ Organization Access Pending
-          </div>
-          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px', lineHeight: 1.7, marginBottom: '16px' }}>
-            Your organization account request has been submitted and is waiting for admin approval.
-            Once approved, you will have access to create and manage donation campaigns.
-          </p>
-          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.3)' }}>
-            Tip: Sign out and sign back in after approval to see your Organization dashboard.
-          </div>
+      {/* ── Donations card ── */}
+      <div style={{
+        borderRadius: '20px', border: '1px solid rgba(255,255,255,0.08)',
+        background: '#0d1021', padding: '28px', marginBottom: '20px',
+      }}>
+        <div style={{ fontSize: '18px', fontWeight: 700, color: '#fff', marginBottom: '6px' }}>
+          💳 Your Donations
         </div>
-      )}
-
-      {/* ── APPROVED NGO ── */}
-      {role === 'ngo' && (
         <div style={{
-          borderRadius: '20px', padding: '28px 32px', marginBottom: '24px',
-          border: '1px solid rgba(34,211,238,0.35)',
-          background: 'rgba(34,211,238,0.06)',
+          fontSize: '14px', color: 'rgba(255,255,255,0.4)', lineHeight: 1.65,
+          marginBottom: '20px',
         }}>
-          <div style={{ fontSize: '18px', fontWeight: 700, color: '#67e8f9', marginBottom: '10px',
-                        fontFamily: "'Playfair Display', Georgia, serif" }}>
-            🏥 Organization Dashboard
-          </div>
-          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px', lineHeight: 1.7, marginBottom: '20px' }}>
-            Your organization is approved. You can create campaigns, upload milestone proofs, and manage fund releases.
-          </p>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            <Link to="/ngo" style={{
-              padding: '12px 24px', borderRadius: '12px', fontWeight: 700, fontSize: '13px',
-              background: 'linear-gradient(135deg,#0891b2,#22d3ee)', color: '#fff',
-              textDecoration: 'none',
-            }}>Go to NGO Dashboard</Link>
-            <Link to="/proof" style={{
-              padding: '12px 24px', borderRadius: '12px', fontWeight: 700, fontSize: '13px',
-              border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', color: '#fff',
-              textDecoration: 'none',
-            }}>Upload Proof</Link>
-          </div>
+          Track your donations, view campaign updates, and see exactly where every rupee went.
         </div>
-      )}
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <Link to="/campaigns" style={{
+            padding: '11px 22px', borderRadius: '10px',
+            background: 'linear-gradient(135deg,#7c3aed,#0891b2)',
+            color: '#fff', fontWeight: 700, fontSize: '13px', textDecoration: 'none',
+          }}>Browse Campaigns</Link>
+          <Link to="/transparency" style={{
+            padding: '11px 22px', borderRadius: '10px',
+            border: '1px solid rgba(255,255,255,0.12)',
+            background: 'rgba(255,255,255,0.05)',
+            color: '#fff', fontWeight: 700, fontSize: '13px', textDecoration: 'none',
+          }}>View Transparency</Link>
+        </div>
+      </div>
 
-      {/* ── DONOR ── */}
+      {/* ── NGO upgrade card — only for donors ── */}
       {role === 'donor' && (
         <div style={{
           borderRadius: '20px', border: '1px solid rgba(255,255,255,0.08)',
-          background: '#0d1021', padding: '28px 32px', marginBottom: '24px',
+          background: '#0d1021', padding: '28px',
         }}>
-          <div style={{ fontSize: '18px', fontWeight: 700, color: '#fff', marginBottom: '10px',
-                        fontFamily: "'Playfair Display', Georgia, serif" }}>
-            🙋 Your Donations
+          <div style={{
+            fontSize: '11px', fontWeight: 700, letterSpacing: '2px',
+            textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '8px',
+          }}>NGO / Organisation access</div>
+          <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.45)', lineHeight: 1.65, marginBottom: '16px' }}>
+            Are you running an NGO, hospital, or relief organisation? Register to create and
+            manage fundraising campaigns on TransparentFund.
           </div>
-          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', lineHeight: 1.7, marginBottom: '20px' }}>
-            Track your donations, view campaign updates, and see exactly where every rupee went.
-          </p>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            <Link to="/campaigns" style={{
-              padding: '12px 24px', borderRadius: '12px', fontWeight: 700, fontSize: '13px',
-              background: 'linear-gradient(135deg,#7c3aed,#0891b2)', color: '#fff',
-              textDecoration: 'none',
-            }}>Browse Campaigns</Link>
-            <Link to="/transparency" style={{
-              padding: '12px 24px', borderRadius: '12px', fontWeight: 700, fontSize: '13px',
-              border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.05)', color: '#fff',
-              textDecoration: 'none',
-            }}>View Transparency</Link>
-          </div>
+
+          {reqSent ? (
+            <div style={{
+              padding: '14px 16px', borderRadius: '10px',
+              border: '1px solid rgba(16,185,129,0.35)',
+              background: 'rgba(16,185,129,0.1)',
+              fontSize: '13px', color: '#6ee7b7', lineHeight: 1.6,
+            }}>
+              ✓ Request submitted — an admin will review it. Sign out and back in after approval.
+            </div>
+          ) : (
+            <>
+              <Link to="/ngo" style={{
+                display: 'inline-flex', alignItems: 'center',
+                padding: '11px 22px', borderRadius: '10px',
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'rgba(255,255,255,0.05)',
+                color: '#fff', fontWeight: 700, fontSize: '13px', textDecoration: 'none',
+              }}>
+                Register Organisation →
+              </Link>
+              <div style={{ marginTop: '10px', fontSize: '12px', color: 'rgba(255,255,255,0.25)' }}>
+                After approval, sign out and sign back in to access the NGO dashboard.
+              </div>
+            </>
+          )}
         </div>
       )}
-
-      {/* ── ADMIN ── */}
-      {role === 'admin' && (
-        <div style={{
-          borderRadius: '20px', padding: '28px 32px', marginBottom: '24px',
-          border: '1px solid rgba(245,158,11,0.35)',
-          background: 'rgba(245,158,11,0.06)',
-        }}>
-          <div style={{ fontSize: '18px', fontWeight: 700, color: '#fcd34d', marginBottom: '10px',
-                        fontFamily: "'Playfair Display', Georgia, serif" }}>
-            🛡️ Admin Access
-          </div>
-          <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '14px', lineHeight: 1.7, marginBottom: '20px' }}>
-            You have full admin access. Approve NGO requests, manage campaigns, and oversee the platform.
-          </p>
-          <Link to="/admin" style={{
-            display: 'inline-block', padding: '12px 24px', borderRadius: '12px',
-            fontWeight: 700, fontSize: '13px',
-            background: 'linear-gradient(135deg,#d97706,#f59e0b)', color: '#fff',
-            textDecoration: 'none',
-          }}>Go to Admin Panel</Link>
-        </div>
-      )}
-
     </div>
   );
 }
