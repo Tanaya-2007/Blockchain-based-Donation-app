@@ -16,6 +16,7 @@ import ProofUpload    from './pages/ProofUpload';
 import DonorDashboard from './pages/DonorDashboard';
 import NgoDashboard   from './pages/NgoDashboard';
 import AdminPanel     from './pages/AdminPanel';
+import CreateCampaign from './pages/CreateCampaign';
 
 function AppRoutes() {
   const [toast,      setToast]      = useState({ msg: '', type: '' });
@@ -28,7 +29,6 @@ function AppRoutes() {
 
   return (
     <>
-      {/* Background */}
       <div style={{
         position: 'fixed', inset: 0, zIndex: -1,
         backgroundColor: '#050812',
@@ -52,16 +52,12 @@ function AppRoutes() {
 
             {/* ── ANY LOGGED-IN USER ── */}
             <Route element={<RequireAuth />}>
-              {/* Donor's personal history page */}
-              <Route path="/account" element={<DonorDashboard />} />
-
-              {/* /ngo is open to ANY auth'd user — NgoDashboard internally
-                  shows the registration form if the user isn't approved yet,
-                  and the full dashboard if they are. */}
-              <Route path="/ngo" element={<NgoDashboard />} />
+              <Route path="/account"         element={<DonorDashboard />} />
+              <Route path="/ngo"             element={<NgoDashboard />} />
+              <Route path="/create-campaign" element={<CreateCampaign />} />
             </Route>
 
-            {/* ── NGO + ADMIN only (approved) ── */}
+            {/* ── NGO + ADMIN only ── */}
             <Route element={<RequireAuth allowRoles={['ngo', 'admin']} />}>
               <Route path="/proof" element={<ProofUpload onToast={showToast} />} />
             </Route>
@@ -71,6 +67,7 @@ function AppRoutes() {
               <Route path="/admin" element={<AdminPanel />} />
             </Route>
 
+            {/* ── wildcard MUST be last ── */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
