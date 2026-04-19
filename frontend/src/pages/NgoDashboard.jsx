@@ -69,15 +69,14 @@ async function compressImage(file) {
   });
 }
 
-/* ─── FAST parallel Cloudinary upload ───────────────── */
+/* ─── Cloudinary upload — NO eager param (unsigned preset restriction) ── */
 function uploadToCloudinary(file, onProgress) {
   return new Promise((resolve, reject) => {
     const fd = new FormData();
     fd.append('file', file);
     fd.append('upload_preset', UPLOAD_PRESET);
     fd.append('folder', 'ngoRequests');
-    // quality_auto for smaller payload, format_auto for optimal format
-    fd.append('eager', 'q_auto,f_auto');
+    // ⚠️ DO NOT add 'eager' — unsigned presets don't allow it
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`);
@@ -153,7 +152,6 @@ export default function NgoDashboard() {
 
   const [status,    setStatus]    = useState('loading');
   const [showPopup, setShowPopup] = useState(false);
-  // Live stats
   const [campaigns,   setCampaigns]   = useState([]);
   const [totalRaised, setTotalRaised] = useState(0);
 
@@ -185,7 +183,6 @@ export default function NgoDashboard() {
       setStatus('approved');
       const key = `ngo_approved_seen_${user.uid}`;
       if (!localStorage.getItem(key)) { setShowPopup(true); localStorage.setItem(key, '1'); }
-      // Load live campaign stats
       getDocs(query(collection(db, 'campaigns'), where('ngoId', '==', user.uid))).then(snap => {
         const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setCampaigns(list);
@@ -219,21 +216,18 @@ export default function NgoDashboard() {
 
     try {
       const urls = {};
-      // ── PARALLEL upload: all files start at the same time for max speed ──
-      const uploadTasks = filesToUpload.map(async (docDef) => {
+      let done = 0;
+
+      // Sequential upload — clear progress per file
+      for (const docDef of filesToUpload) {
+        setUploadLabel(docDef.label);
+        setUploadPct(0);
         const raw        = docFiles[docDef.key];
         const compressed = await compressImage(raw);
-        const url        = await uploadToCloudinary(compressed, pct => {
-          // Show progress for the currently-active file (last one to report)
-          setUploadLabel(docDef.label);
-          setUploadPct(pct);
-        });
-        urls[docDef.key] = url;
-        setDoneFiles(prev => prev + 1);
-        return url;
-      });
-
-      await Promise.all(uploadTasks);
+        urls[docDef.key] = await uploadToCloudinary(compressed, pct => setUploadPct(pct));
+        done++;
+        setDoneFiles(done);
+      }
 
       setUploadLabel('Saving registration…');
       setUploadPct(100);
@@ -253,10 +247,8 @@ export default function NgoDashboard() {
     }
   };
 
-  /* ── loading ── */
   if (status === 'loading') return <div style={{ padding: '80px 48px', color: 'rgba(255,255,255,0.35)', fontSize: '14px' }}>Loading…</div>;
 
-  /* ── approved ── */
   if (status === 'approved') return (
     <>
       {showPopup && <ApprovalPopup onClose={() => setShowPopup(false)} />}
@@ -266,8 +258,6 @@ export default function NgoDashboard() {
           Welcome, {user?.displayName?.split(' ')[0] || 'Organisation'}
         </h2>
         <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', marginBottom: '36px' }}>Manage campaigns, upload milestone proofs, and track fund releases.</p>
-
-        {/* Live stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px', marginBottom: '28px' }}>
           {[
             { label: 'Active campaigns', val: campaigns.filter(c => c.status === 'active').length.toString(), color: '#a78bfa' },
@@ -281,23 +271,28 @@ export default function NgoDashboard() {
           ))}
         </div>
 
-        {/* My campaigns list */}
         {campaigns.length > 0 && (
           <div style={{ marginBottom: '28px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', background: '#0d1021', overflow: 'hidden' }}>
             <div style={{ padding: '16px 24px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontWeight: 700, color: '#fff', fontSize: '14px' }}>My Campaigns</div>
             {campaigns.map(c => {
-              const pct = c.targetAmount ? Math.round((c.raisedAmount || 0) / c.targetAmount * 100) : 0;
+              const raised    = c.raisedAmount  || 0;
+              const target    = c.targetAmount  || 0;
+              const remaining = Math.max(0, target - raised);
+              const pct       = target ? Math.min(Math.round((raised / target) * 100), 100) : 0;
               return (
                 <div key={c.id} style={{ padding: '16px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', gap: '16px' }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#fff', marginBottom: '4px' }}>{c.title}</div>
-                    <div style={{ height: '4px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, background: 'linear-gradient(90deg,#7c3aed,#0891b2)', borderRadius: '4px' }} />
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#fff', marginBottom: '6px' }}>{c.title}</div>
+                    <div style={{ height: '4px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: '6px' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg,#7c3aed,#0891b2)', borderRadius: '4px' }} />
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>
+                      ₹{remaining.toLocaleString('en-IN')} remaining of ₹{target.toLocaleString('en-IN')} goal
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#22d3ee' }}>₹{(c.raisedAmount || 0).toLocaleString('en-IN')}</div>
-                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>{pct}% of ₹{(c.targetAmount || 0).toLocaleString('en-IN')}</div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#22d3ee' }}>₹{raised.toLocaleString('en-IN')}</div>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>{pct}% raised</div>
                   </div>
                 </div>
               );
@@ -306,21 +301,14 @@ export default function NgoDashboard() {
         )}
 
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          <Link to="/create-campaign" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 24px', borderRadius: '12px', background: 'linear-gradient(135deg,#10b981,#0891b2)', color: '#fff', fontWeight: 700, fontSize: '14px', textDecoration: 'none' }}>
-            🚀 Create Campaign
-          </Link>
-          <Link to="/proof" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 24px', borderRadius: '12px', background: 'linear-gradient(135deg,#7c3aed,#0891b2)', color: '#fff', fontWeight: 700, fontSize: '14px', textDecoration: 'none' }}>
-            📄 Upload Milestone Proof
-          </Link>
-          <Link to="/campaigns" style={{ display: 'inline-flex', alignItems: 'center', padding: '12px 24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontWeight: 700, fontSize: '14px', textDecoration: 'none' }}>
-            Browse Campaigns
-          </Link>
+          <Link to="/create-campaign" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 24px', borderRadius: '12px', background: 'linear-gradient(135deg,#10b981,#0891b2)', color: '#fff', fontWeight: 700, fontSize: '14px', textDecoration: 'none' }}>🚀 Create Campaign</Link>
+          <Link to="/proof" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 24px', borderRadius: '12px', background: 'linear-gradient(135deg,#7c3aed,#0891b2)', color: '#fff', fontWeight: 700, fontSize: '14px', textDecoration: 'none' }}>📄 Upload Milestone Proof</Link>
+          <Link to="/campaigns" style={{ display: 'inline-flex', alignItems: 'center', padding: '12px 24px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontWeight: 700, fontSize: '14px', textDecoration: 'none' }}>Browse Campaigns</Link>
         </div>
       </div>
     </>
   );
 
-  /* ── pending ── */
   if (status === 'pending') return (
     <div style={{ minHeight: 'calc(100vh - 68px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 16px' }}>
       <div style={{ width: '100%', maxWidth: '520px', padding: '40px', borderRadius: '20px', border: '1px solid rgba(245,158,11,0.35)', background: 'rgba(245,158,11,0.05)', textAlign: 'center' }}>
@@ -335,7 +323,6 @@ export default function NgoDashboard() {
     </div>
   );
 
-  /* ── rejected ── */
   if (status === 'rejected') return (
     <div style={{ minHeight: 'calc(100vh - 68px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 16px' }}>
       <div style={{ width: '100%', maxWidth: '480px', padding: '40px', borderRadius: '20px', border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.05)', textAlign: 'center' }}>
@@ -423,8 +410,7 @@ export default function NgoDashboard() {
           </div>
 
           <div style={{ padding: '14px 16px', borderRadius: '10px', marginBottom: '24px', border: '1px solid rgba(34,211,238,0.25)', background: 'rgba(34,211,238,0.06)', fontSize: '13px', color: '#67e8f9', lineHeight: 1.65 }}>
-            📋 After submission an admin will review your documents within 1–2 business days.
-            Sign out and sign back in after approval to access the full NGO dashboard.
+            📋 After submission an admin will review your documents within 1–2 business days. Sign out and sign back in after approval to access the full NGO dashboard.
           </div>
 
           {uploading && (
@@ -432,14 +418,14 @@ export default function NgoDashboard() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 600, color: '#c4b5fd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{uploadLabel}</div>
                 <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', flexShrink: 0, marginLeft: '8px' }}>
-                  {doneFiles} / {totalFiles} done
+                  File {doneFiles + 1} of {totalFiles}
                 </div>
               </div>
               <div style={{ height: '6px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                <div style={{ height: '100%', borderRadius: '6px', background: 'linear-gradient(90deg,#7c3aed,#0891b2)', width: `${Math.round((doneFiles / totalFiles) * 100)}%`, transition: 'width 0.3s ease' }} />
+                <div style={{ height: '100%', borderRadius: '6px', background: 'linear-gradient(90deg,#7c3aed,#0891b2)', width: `${Math.round((doneFiles / totalFiles) * 100 + (uploadPct / totalFiles))}%`, transition: 'width 0.2s ease' }} />
               </div>
               <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginTop: '6px' }}>
-                Uploading in parallel — {doneFiles} / {totalFiles} complete
+                Uploading "{uploadLabel}" — {uploadPct}%
               </div>
             </div>
           )}
@@ -451,9 +437,9 @@ export default function NgoDashboard() {
             cursor: uploading ? 'not-allowed' : 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
           }}>
-            {uploading ? (
-              <><span style={{ width: '16px', height: '16px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />Uploading in parallel…</>
-            ) : 'Submit Registration for Admin Review'}
+            {uploading
+              ? <><span style={{ width: '16px', height: '16px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />Uploading… please wait</>
+              : 'Submit Registration for Admin Review'}
           </button>
         </div>
       </div>

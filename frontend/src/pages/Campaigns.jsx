@@ -2,21 +2,17 @@ import { useEffect, useState } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 
+// Module-level constant — computed once when file loads, never during render
+const NOW = Date.now();
+
 const FILTERS = ['All', 'Medical / Healthcare', 'Education', 'Disaster Relief', 'Environmental', 'Child Welfare'];
 const KEYS    = ['all', 'Medical / Healthcare', 'Education', 'Disaster Relief', 'Environmental', 'Child Welfare'];
 
 const CAT_EMOJI = {
-  'Medical / Healthcare': '🏥',
-  'Education':            '📚',
-  'Disaster Relief':      '🆘',
-  'Environmental':        '🌱',
-  'Child Welfare':        '👶',
-  'Women Empowerment':    '💜',
-  'Animal Welfare':       '🐾',
-  'Community Development':'🤝',
-  'Other':                '💡',
+  'Medical / Healthcare': '🏥', 'Education': '📚', 'Disaster Relief': '🆘',
+  'Environmental': '🌱', 'Child Welfare': '👶', 'Women Empowerment': '💜',
+  'Animal Welfare': '🐾', 'Community Development': '🤝', 'Other': '💡',
 };
-
 const CAT_GRAD = {
   'Medical / Healthcare': 'linear-gradient(135deg,#1e0840 0%,#2d1052 100%)',
   'Education':            'linear-gradient(135deg,#1a1a05 0%,#2d2d0f 100%)',
@@ -37,23 +33,13 @@ export default function Campaigns({ onDonate }) {
 
   useEffect(() => {
     (async () => {
-      setLoading(true);
-      setError('');
+      setLoading(true); setError('');
       try {
-        // ─── Simple query: only filter by status (no orderBy) ────────────────
-        // Using where + orderBy on different fields requires a Firestore
-        // composite index. To avoid that setup step, we sort client-side.
-        const snap = await getDocs(
-          query(collection(db, 'campaigns'), where('status', '==', 'active'))
-        );
+        const snap = await getDocs(query(collection(db, 'campaigns'), where('status', '==', 'active')));
         const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        // Sort newest first client-side
         list.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
         setCampaigns(list);
-      } catch (e) {
-        console.error('Campaigns fetch error:', e);
-        setError(e.message);
-      }
+      } catch (e) { console.error(e); setError(e.message); }
       setLoading(false);
     })();
   }, []);
@@ -66,16 +52,10 @@ export default function Campaigns({ onDonate }) {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: '16px', flexWrap: 'wrap', marginBottom: '28px' }}>
         <div>
-          <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '30px', fontWeight: 800, letterSpacing: '-0.5px', color: '#fff', marginBottom: '6px' }}>
-            Active Campaigns
-          </h2>
-          <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '13px' }}>
-            All campaigns verified · Funds milestone-locked
-          </p>
+          <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '30px', fontWeight: 800, letterSpacing: '-0.5px', color: '#fff', marginBottom: '6px' }}>Active Campaigns</h2>
+          <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '13px' }}>All campaigns verified · Funds milestone-locked</p>
         </div>
-        <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.3)' }}>
-          {campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}
-        </div>
+        <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.3)' }}>{campaigns.length} campaign{campaigns.length !== 1 ? 's' : ''}</div>
       </div>
 
       {/* Filters */}
@@ -91,26 +71,18 @@ export default function Campaigns({ onDonate }) {
         ))}
       </div>
 
-      {/* Firestore permission error hint */}
       {error && (
         <div style={{ padding: '14px 16px', borderRadius: '12px', marginBottom: '24px', border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.07)', fontSize: '13px', color: '#fca5a5' }}>
           ⚠ Could not load campaigns: {error}
-          <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginTop: '4px' }}>
-            Check Firestore Rules — campaigns must allow <code>read: if true</code>
-          </div>
         </div>
       )}
 
-      {/* Skeleton loading */}
       {loading && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-          {[1, 2, 3].map(i => (
-            <div key={i} style={{ borderRadius: '20px', border: '1px solid rgba(255,255,255,0.07)', background: '#0d1021', height: '360px', opacity: 0.5 }} />
-          ))}
+          {[1, 2, 3].map(i => <div key={i} style={{ borderRadius: '20px', border: '1px solid rgba(255,255,255,0.07)', background: '#0d1021', height: '380px', opacity: 0.5 }} />)}
         </div>
       )}
 
-      {/* Empty state */}
       {!loading && shown.length === 0 && !error && (
         <div style={{ textAlign: 'center', padding: '80px 20px' }}>
           <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
@@ -123,16 +95,19 @@ export default function Campaigns({ onDonate }) {
         </div>
       )}
 
-      {/* Cards grid */}
       {!loading && shown.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
           {shown.map(c => {
-            const pct      = c.targetAmount ? Math.min(Math.round(((c.raisedAmount || 0) / c.targetAmount) * 100), 100) : 0;
-            const isHov    = hovered === c.id;
-            const emoji    = CAT_EMOJI[c.category]  || '💡';
-            const grad     = CAT_GRAD[c.category]   || CAT_GRAD.Other;
-            const daysLeft = c.deadline?.seconds
-              ? Math.max(0, Math.ceil((c.deadline.seconds * 1000 - Date.now()) / 86400000))
+            const raised    = c.raisedAmount || 0;
+            const target    = c.targetAmount || 0;
+            const remaining = Math.max(0, target - raised);
+            const pct       = target ? Math.min(Math.round((raised / target) * 100), 100) : 0;
+            const isGoalMet = target > 0 && remaining === 0;
+            const isHov     = hovered === c.id;
+            const emoji     = CAT_EMOJI[c.category] || '💡';
+            const grad      = CAT_GRAD[c.category]  || CAT_GRAD.Other;
+            const daysLeft  = c.deadline?.seconds
+              ? Math.max(0, Math.ceil((c.deadline.seconds * 1000 - NOW) / 86400000))
               : null;
 
             return (
@@ -153,8 +128,7 @@ export default function Campaigns({ onDonate }) {
                 <div style={{ height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', background: grad, overflow: 'hidden' }}>
                   {c.imageUrl
                     ? <img src={c.imageUrl} alt={c.title} style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }} />
-                    : <span style={{ fontSize: '56px' }}>{emoji}</span>
-                  }
+                    : <span style={{ fontSize: '56px' }}>{emoji}</span>}
                   <span style={{ position: 'absolute', top: '12px', right: '12px', fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '999px', border: '1px solid rgba(16,185,129,0.5)', background: 'rgba(16,185,129,0.15)', color: '#6ee7b7' }}>
                     ✓ Verified
                   </span>
@@ -172,31 +146,52 @@ export default function Campaigns({ onDonate }) {
                   <h3 style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '-0.2px', color: '#fff', marginBottom: '8px', lineHeight: 1.35 }}>
                     {c.title}
                   </h3>
-                  <p style={{ color: 'rgba(255,255,255,0.38)', fontSize: '12px', lineHeight: 1.65, marginBottom: '18px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                  <p style={{ color: 'rgba(255,255,255,0.38)', fontSize: '12px', lineHeight: 1.65, marginBottom: '16px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                     {c.description}
                   </p>
 
                   {/* Progress */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginBottom: '6px' }}>
-                    <span><strong style={{ color: '#fff' }}>₹{(c.raisedAmount || 0).toLocaleString('en-IN')}</strong> raised</span>
-                    <strong style={{ color: '#fff' }}>{pct}%</strong>
+                    <span><strong style={{ color: '#fff' }}>₹{raised.toLocaleString('en-IN')}</strong> raised</span>
+                    <strong style={{ color: pct >= 100 ? '#34d399' : '#fff' }}>{pct}%</strong>
                   </div>
-                  <div style={{ height: '4px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', marginBottom: '6px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${pct}%`, borderRadius: '4px', background: 'linear-gradient(90deg,#7c3aed,#0891b2)' }} />
-                  </div>
-                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginBottom: '18px' }}>
-                    Goal: ₹{(c.targetAmount || 0).toLocaleString('en-IN')} · {c.donorCount || 0} donor{c.donorCount !== 1 ? 's' : ''}
+                  <div style={{ height: '4px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', marginBottom: '8px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, borderRadius: '4px', background: pct >= 100 ? 'linear-gradient(90deg,#10b981,#34d399)' : 'linear-gradient(90deg,#7c3aed,#0891b2)' }} />
                   </div>
 
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22d3ee', display: 'inline-block' }} />
-                      M{c.currentMilestone || 1} of {c.milestones?.length || '?'}
+                  {/* Goal + remaining — fixed layout, no overflow */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginBottom: '3px' }}>
+                      Goal: ₹{target.toLocaleString('en-IN')} · {c.donorCount || 0} donor{c.donorCount !== 1 ? 's' : ''}
+                    </div>
+                    {isGoalMet ? (
+                      <div style={{ fontSize: '11px', color: '#34d399', fontWeight: 700 }}>🎉 Goal reached!</div>
+                    ) : (
+                      <div style={{ fontSize: '11px', color: '#22d3ee', fontWeight: 600 }}>
+                        ₹{remaining.toLocaleString('en-IN')} still needed
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bottom row — milestone left, donate button right */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0, overflow: 'hidden' }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#22d3ee', display: 'inline-block', flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        M{c.currentMilestone || 1} of {c.milestones?.length || '?'}
+                      </span>
                     </span>
                     <button
                       onClick={e => { e.stopPropagation(); onDonate({ ...c }); }}
-                      style={{ padding: '7px 18px', borderRadius: '8px', border: 'none', background: '#7c3aed', color: '#fff', fontWeight: 700, fontSize: '12px', cursor: 'pointer' }}>
-                      Donate
+                      disabled={isGoalMet}
+                      style={{
+                        padding: '7px 16px', borderRadius: '8px', border: 'none', flexShrink: 0,
+                        background: isGoalMet ? 'rgba(255,255,255,0.08)' : '#7c3aed',
+                        color: isGoalMet ? 'rgba(255,255,255,0.3)' : '#fff',
+                        fontWeight: 700, fontSize: '12px',
+                        cursor: isGoalMet ? 'not-allowed' : 'pointer',
+                      }}>
+                      {isGoalMet ? 'Funded ✓' : 'Donate'}
                     </button>
                   </div>
                 </div>
