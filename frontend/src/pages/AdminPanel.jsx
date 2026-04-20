@@ -20,20 +20,10 @@ const DOC_LABELS = {
   authLetter: 'Authorisation Letter', cert80G: '80G / 12A Certificate', auditReport: 'Audit Report',
 };
 
-/* ── Open Cloudinary document safely ────────────────────
-   PDFs hosted on Cloudinary sometimes need fl_attachment
-   to force download, OR the raw URL works in a new tab.
-   We try window.open first; if the URL is Cloudinary we
-   rewrite it to force inline viewing.                    */
+/* ── Open document in new tab ── */
 function openDoc(url) {
   if (!url) return;
-  // For Cloudinary URLs, ensure inline viewing (not forced download)
-  let finalUrl = url;
-  if (url.includes('cloudinary.com') && url.includes('/upload/')) {
-    // Insert fl_inline transformation to show in browser
-    finalUrl = url.replace('/upload/', '/upload/fl_inline/');
-  }
-  window.open(finalUrl, '_blank', 'noopener,noreferrer');
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 /* ─── confirm modal ──────────────────────────────────── */
@@ -69,19 +59,22 @@ function VerdictBadge({ score, verdict }) {
   );
 }
 
-/* ─── Doc link button ────────────────────────────────── */
+/* ─── Doc link ───────────────────────────────────────── */
 function DocLink({ url, label }) {
+  if (!url) return null;
   return (
-    <button
-      onClick={() => openDoc(url)}
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
       style={{
         display: 'inline-flex', alignItems: 'center', gap: '7px',
         padding: '8px 14px', borderRadius: '8px', cursor: 'pointer',
         border: '1px solid rgba(124,58,237,0.35)', background: 'rgba(124,58,237,0.1)',
-        color: '#c4b5fd', fontSize: '12px', fontWeight: 600,
+        color: '#c4b5fd', fontSize: '12px', fontWeight: 600, textDecoration: 'none',
       }}>
       📄 {label} <span style={{ fontSize: '10px', opacity: 0.6 }}>↗</span>
-    </button>
+    </a>
   );
 }
 

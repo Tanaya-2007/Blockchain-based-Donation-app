@@ -100,12 +100,27 @@ export default function Navbar({ onDonate }) {
               color: '#fff', fontWeight: 700, fontSize: '13px', textDecoration: 'none',
             }}>Sign in</NavLink>
           ) : (
-            <button onClick={() => signOut()} style={{
-              padding: '9px 20px', borderRadius: '10px',
-              border: '1px solid rgba(255,255,255,0.14)',
-              background: 'rgba(255,255,255,0.05)',
-              color: 'rgba(255,255,255,0.8)', fontWeight: 700, fontSize: '13px', cursor: 'pointer',
-            }}>Sign out</button>
+            <>
+              <NavLink to="/account" style={({ isActive }) => ({
+                padding: '7px 14px', borderRadius: '10px', textDecoration: 'none',
+                border: isActive ? '1px solid rgba(124,58,237,0.5)' : '1px solid rgba(255,255,255,0.14)',
+                background: isActive ? 'rgba(124,58,237,0.15)' : 'rgba(255,255,255,0.05)',
+                color: isActive ? '#c4b5fd' : 'rgba(255,255,255,0.8)',
+                fontWeight: 700, fontSize: '13px',
+                display: 'flex', alignItems: 'center', gap: '6px',
+              })}>
+                {user?.photoURL
+                  ? <img src={user.photoURL} referrerPolicy="no-referrer" alt="" style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }} />
+                  : <span style={{ fontSize: '14px' }}>👤</span>}
+                My Account
+              </NavLink>
+              <button onClick={() => signOut()} style={{
+                padding: '9px 20px', borderRadius: '10px',
+                border: '1px solid rgba(255,255,255,0.14)',
+                background: 'rgba(255,255,255,0.05)',
+                color: 'rgba(255,255,255,0.8)', fontWeight: 700, fontSize: '13px', cursor: 'pointer',
+              }}>Sign out</button>
+            </>
           )}
         </div>
 
@@ -175,13 +190,28 @@ export default function Navbar({ onDonate }) {
               display: 'block', marginTop: '4px',
             }}>Sign in</NavLink>
           ) : (
-            <button onClick={() => { close(); signOut(); }} style={{
-              padding: '13px 20px', borderRadius: '10px',
-              border: '1px solid rgba(255,255,255,0.14)',
-              background: 'rgba(255,255,255,0.05)',
-              color: 'rgba(255,255,255,0.8)', fontWeight: 700, fontSize: '14px',
-              cursor: 'pointer', textAlign: 'left', marginTop: '4px',
-            }}>Sign out</button>
+            <>
+              <NavLink to="/account" onClick={close} style={({ isActive }) => ({
+                padding: '13px 20px', borderRadius: '10px', textDecoration: 'none',
+                border: isActive ? '1px solid rgba(124,58,237,0.5)' : '1px solid rgba(255,255,255,0.14)',
+                background: isActive ? 'rgba(124,58,237,0.15)' : 'rgba(255,255,255,0.05)',
+                color: isActive ? '#c4b5fd' : 'rgba(255,255,255,0.8)',
+                fontWeight: 700, fontSize: '14px', marginTop: '4px',
+                display: 'flex', alignItems: 'center', gap: '8px',
+              })}>
+                {user?.photoURL
+                  ? <img src={user.photoURL} referrerPolicy="no-referrer" alt="" style={{ width: '22px', height: '22px', borderRadius: '50%', objectFit: 'cover' }} />
+                  : <span>👤</span>}
+                My Account
+              </NavLink>
+              <button onClick={() => { close(); signOut(); }} style={{
+                padding: '13px 20px', borderRadius: '10px',
+                border: '1px solid rgba(255,255,255,0.14)',
+                background: 'rgba(255,255,255,0.05)',
+                color: 'rgba(255,255,255,0.8)', fontWeight: 700, fontSize: '14px',
+                cursor: 'pointer', textAlign: 'left', marginTop: '4px',
+              }}>Sign out</button>
+            </>
           )}
         </div>
       )}
