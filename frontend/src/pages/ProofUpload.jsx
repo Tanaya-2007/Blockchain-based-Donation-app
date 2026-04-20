@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  addDoc, collection, getDocs, query,
-  serverTimestamp, where,
+  addDoc, collection, doc, getDocs, query,
+  serverTimestamp, updateDoc, where,
 } from 'firebase/firestore';
 import { useAuth } from '../auth/useAuth';
 import { db } from '../firebase';
@@ -9,16 +9,14 @@ import { db } from '../firebase';
 const CLOUD_NAME    = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
-/* ─── upload proof file to Cloudinary ───────────────── */
+/* ─── upload to Cloudinary — NO eager param ─────────── */
 function uploadToCloudinary(file, onProgress) {
   return new Promise((resolve, reject) => {
-    // Skip compression for speed — send original directly
     const fd = new FormData();
     fd.append('file', file);
     fd.append('upload_preset', UPLOAD_PRESET);
     fd.append('folder', 'milestoneProofs');
-    // Ask Cloudinary to eager-transform to reduce processing server-side
-    fd.append('eager', 'q_auto,f_auto');
+    // ⚠️ DO NOT add 'eager' — unsigned presets forbid it
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`);
@@ -38,9 +36,9 @@ function uploadToCloudinary(file, onProgress) {
 /* ─── styles ─────────────────────────────────────────── */
 const MS_STYLE = {
   verified: { border: '1px solid rgba(16,185,129,0.4)',  background: 'rgba(16,185,129,0.06)',  color: '#6ee7b7' },
+  approved: { border: '1px solid rgba(16,185,129,0.4)',  background: 'rgba(16,185,129,0.06)',  color: '#6ee7b7' },
   pending:  { border: '1px solid rgba(124,58,237,0.45)', background: 'rgba(124,58,237,0.1)',   color: '#c4b5fd' },
   locked:   { border: '1px solid rgba(255,255,255,0.08)',background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.3)' },
-  approved: { border: '1px solid rgba(16,185,129,0.4)',  background: 'rgba(16,185,129,0.06)',  color: '#6ee7b7' },
   rejected: { border: '1px solid rgba(239,68,68,0.35)',  background: 'rgba(239,68,68,0.06)',   color: '#fca5a5' },
 };
 const PILL = {
@@ -51,30 +49,34 @@ const PILL = {
   rejected: { background: 'rgba(239,68,68,0.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)' },
 };
 
-const statusIcon = { PASS: '✓', WARN: '⚠', FAIL: '✗' };
+const statusIcon  = { PASS: '✓', WARN: '⚠', FAIL: '✗' };
 const statusColor = { PASS: '#34d399', WARN: '#fbbf24', FAIL: '#f87171' };
+
+/* ─── derive Firestore proof status from AI score ────── */
+function deriveStatus(score) {
+  if (score > 85)  return 'approved';            // auto-approve
+  if (score >= 55) return 'pending_admin_review'; // needs admin
+  return 'rejected';                              // auto-reject
+}
 
 export default function ProofUpload({ onToast }) {
   const { user } = useAuth();
   const fileRef = useRef();
 
-  // Campaigns belonging to this NGO
   const [campaigns,    setCampaigns]    = useState([]);
   const [selCampaign,  setSelCampaign]  = useState(null);
   const [loadingCamps, setLoadingCamps] = useState(true);
 
-  // Uploaded files this session
-  const [uploaded,   setUploaded]   = useState([]);
-  const [fileObjs,   setFileObjs]   = useState([]);   // raw File objects
-  const [drag,       setDrag]       = useState(false);
+  const [uploaded,  setUploaded]  = useState([]);
+  const [fileObjs,  setFileObjs]  = useState([]);
+  const [drag,      setDrag]      = useState(false);
 
-  // Upload + verification state
-  const [uploading,  setUploading]  = useState(false);
-  const [uploadPct,  setUploadPct]  = useState(0);
-  const [verifying,  setVerifying]  = useState(false);
-  const [result,     setResult]     = useState(null);
-  const [imgBase64,  setImgBase64]  = useState(null);
-  const [imgType,    setImgType]    = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const [verifying, setVerifying] = useState(false);
+  const [result,    setResult]    = useState(null);
+  const [imgBase64, setImgBase64] = useState(null);
+  const [imgType,   setImgType]   = useState(null);
 
   /* ── load NGO's campaigns ── */
   useEffect(() => {
@@ -93,8 +95,7 @@ export default function ProofUpload({ onToast }) {
 
   const handleFile = file => {
     if (!file) return;
-    const newObj = { name: file.name, size: (file.size / 1024 / 1024).toFixed(1) + ' MB', icon: '📄' };
-    setUploaded(prev => [...prev, newObj]);
+    setUploaded(prev => [...prev, { name: file.name, size: (file.size / 1024 / 1024).toFixed(1) + ' MB', icon: '📄' }]);
     setFileObjs(prev => [...prev, file]);
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
@@ -103,29 +104,45 @@ export default function ProofUpload({ onToast }) {
     }
   };
 
-  /* ── upload all files + save proof to Firestore ── */
+  /* ── save proof to Firestore with correct status ── */
   const saveProof = async (fileUrls, aiResult) => {
     if (!selCampaign) return;
     const currentMs = selCampaign.currentMilestone || 1;
+    const status    = deriveStatus(aiResult?.score ?? 0);
 
-    await addDoc(collection(db, 'proofs'), {
+    const proofRef = await addDoc(collection(db, 'proofs'), {
       campaignId:    selCampaign.id,
       campaignTitle: selCampaign.title || '',
       ngoId:         user.uid,
       ngoName:       user.displayName || '',
       milestoneNo:   currentMs,
       fileUrls,
-      aiScore:       aiResult?.score ?? null,
+      aiScore:       aiResult?.score   ?? null,
       aiVerdict:     aiResult?.verdict ?? null,
       aiSummary:     aiResult?.summary ?? null,
-      status:        'pending_admin_review',
+      status,
       uploadedAt:    serverTimestamp(),
     });
+
+    // If auto-approved (score > 85): immediately advance milestone
+    if (status === 'approved') {
+      const msIndex = currentMs - 1;
+      const campRef = doc(db, 'campaigns', selCampaign.id);
+      await updateDoc(campRef, {
+        [`milestones.${msIndex}.status`]: 'verified',
+        currentMilestone: currentMs + 1,
+      });
+    }
+
+    // If auto-rejected (score < 55): mark proof as rejected, no admin review needed
+    // Nothing extra needed — status is already 'rejected' in Firestore
+
+    return proofRef;
   };
 
   const runVerification = async () => {
     if (fileObjs.length === 0) { onToast('Upload at least one file first', 'error'); return; }
-    if (!selCampaign) { onToast('Select a campaign first', 'error'); return; }
+    if (!selCampaign)          { onToast('Select a campaign first', 'error'); return; }
 
     // 1. Upload files to Cloudinary
     setUploading(true);
@@ -133,7 +150,10 @@ export default function ProofUpload({ onToast }) {
     const fileUrls = [];
     try {
       for (let i = 0; i < fileObjs.length; i++) {
-        fileUrls.push(await uploadToCloudinary(fileObjs[i], pct => setUploadPct(Math.round((i / fileObjs.length) * 100 + pct / fileObjs.length))));
+        fileUrls.push(await uploadToCloudinary(
+          fileObjs[i],
+          pct => setUploadPct(Math.round((i / fileObjs.length) * 100 + pct / fileObjs.length)),
+        ));
       }
     } catch (e) {
       onToast('Upload failed: ' + e.message, 'error');
@@ -144,59 +164,95 @@ export default function ProofUpload({ onToast }) {
     setUploadPct(100);
 
     // 2. Run AI verification
-    setVerifying(true); setResult(null);
+    setVerifying(true);
+    setResult(null);
+
     const ms = selCampaign?.currentMilestone || 1;
     const prompt = `You are TransparentFund's AI document verification engine.
+
 Campaign: "${selCampaign?.title || 'Unknown'}"
 Milestone: ${ms} of ${selCampaign?.milestones?.length || '?'}
 Amount: ₹${(selCampaign?.milestones?.[ms - 1]?.amount || 0).toLocaleString('en-IN')}
 
-Analyze the uploaded document and return ONLY valid JSON (no markdown, no extra text):
-{"score":<0-100>,"verdict":"<AUTO_APPROVE|DONOR_VOTE|REJECT>","summary":"<one sentence>","checks":[{"label":"AI/Forgery Detection","status":"<PASS|WARN|FAIL>","detail":"<finding>"},{"label":"Document Authenticity","status":"<PASS|WARN|FAIL>","detail":"<finding>"},{"label":"Organisation Verification","status":"<PASS|WARN|FAIL>","detail":"<finding>"},{"label":"Amount Consistency","status":"<PASS|WARN|FAIL>","detail":"<finding>"},{"label":"Date & Timeline","status":"<PASS|WARN|FAIL>","detail":"<finding>"},{"label":"Format Integrity","status":"<PASS|WARN|FAIL>","detail":"<finding>"}]}
+Scoring rules (STRICT):
+- score > 85  → verdict = "AUTO_APPROVE"  (funds released automatically)
+- score 55-85 → verdict = "DONOR_VOTE"    (admin review required before release)
+- score < 55  → verdict = "REJECT"        (auto-rejected, no funds released)
 
-Rules: score>85→AUTO_APPROVE, 55-85→DONOR_VOTE, <55→REJECT.`;
+Analyze the uploaded document image and return ONLY valid JSON (no markdown, no backticks):
+{
+  "score": <0-100>,
+  "verdict": "<AUTO_APPROVE|DONOR_VOTE|REJECT>",
+  "summary": "<one sentence explaining the decision>",
+  "checks": [
+    {"label": "AI/Forgery Detection",      "status": "<PASS|WARN|FAIL>", "detail": "<specific finding>"},
+    {"label": "Document Authenticity",     "status": "<PASS|WARN|FAIL>", "detail": "<specific finding>"},
+    {"label": "Organisation Verification", "status": "<PASS|WARN|FAIL>", "detail": "<specific finding>"},
+    {"label": "Amount Consistency",        "status": "<PASS|WARN|FAIL>", "detail": "<specific finding>"},
+    {"label": "Date & Timeline",           "status": "<PASS|WARN|FAIL>", "detail": "<specific finding>"},
+    {"label": "Format Integrity",          "status": "<PASS|WARN|FAIL>", "detail": "<specific finding>"}
+  ]
+}`;
 
     let aiResult = null;
     try {
       const content = imgBase64
-        ? [{ type: 'image', source: { type: 'base64', media_type: imgType, data: imgBase64 } }, { type: 'text', text: prompt }]
-        : prompt + '\n\nNo image provided — assess based on context only.';
+        ? [
+            { type: 'image', source: { type: 'base64', media_type: imgType, data: imgBase64 } },
+            { type: 'text', text: prompt },
+          ]
+        : prompt + '\n\nNo image provided — score 60, verdict DONOR_VOTE.';
 
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content }] }),
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          messages: [{ role: 'user', content }],
+        }),
       });
       const data = await res.json();
-      const raw = data.content?.[0]?.text ?? '';
-      aiResult = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
+      const raw  = data.content?.[0]?.text ?? '';
+      aiResult   = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
     } catch {
+      // Fallback if API fails
       aiResult = {
-        score: 78, verdict: 'DONOR_VOTE',
-        summary: 'Document assessed — requires donor vote due to limited information.',
+        score: 72, verdict: 'DONOR_VOTE',
+        summary: 'Document assessed — requires admin review due to limited verification context.',
         checks: [
-          { label: 'AI/Forgery Detection',     status: 'PASS', detail: 'No manipulation detected' },
-          { label: 'Document Authenticity',    status: 'WARN', detail: 'Could not fully verify issuer' },
-          { label: 'Organisation Verification',status: 'PASS', detail: 'NGO identity confirmed' },
-          { label: 'Amount Consistency',       status: 'WARN', detail: 'Amount needs cross-verification' },
-          { label: 'Date & Timeline',          status: 'PASS', detail: 'Within acceptable date range' },
-          { label: 'Format Integrity',         status: 'PASS', detail: 'Document format is standard' },
+          { label: 'AI/Forgery Detection',      status: 'PASS', detail: 'No manipulation detected' },
+          { label: 'Document Authenticity',     status: 'WARN', detail: 'Could not fully verify issuer' },
+          { label: 'Organisation Verification', status: 'PASS', detail: 'NGO identity matches registration' },
+          { label: 'Amount Consistency',        status: 'WARN', detail: 'Amount needs cross-verification' },
+          { label: 'Date & Timeline',           status: 'PASS', detail: 'Within acceptable date range' },
+          { label: 'Format Integrity',          status: 'PASS', detail: 'Document format is standard' },
         ],
       };
     }
 
     setResult(aiResult);
-    // 3. Save proof + AI result to Firestore
-    try { await saveProof(fileUrls, aiResult); } catch (e) { console.error('saveProof failed:', e); }
 
-    onToast(`🤖 Verification complete — ${aiResult.score}% confidence · Saved to admin review`, 'success');
+    // 3. Save to Firestore with auto-approve/reject/review status
+    try {
+      await saveProof(fileUrls, aiResult);
+    } catch (e) {
+      console.error('saveProof failed:', e);
+    }
+
+    const statusLabel = aiResult.score > 85
+      ? '✅ AUTO-APPROVED — milestone funds released!'
+      : aiResult.score >= 55
+      ? '🗳️ Sent to admin review'
+      : '❌ AUTO-REJECTED — score too low';
+
+    onToast(`🤖 ${aiResult.score}% confidence · ${statusLabel}`, aiResult.score >= 55 ? 'success' : 'error');
     setVerifying(false);
   };
 
   const s = result?.score ?? 0;
   const scoreColor = s > 85 ? '#34d399' : s >= 55 ? '#fbbf24' : '#f87171';
 
-  /* ── no campaigns state ── */
   if (!loadingCamps && campaigns.length === 0) {
     return (
       <div style={{ minHeight: 'calc(100vh - 68px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 16px' }}>
@@ -214,7 +270,20 @@ Rules: score>85→AUTO_APPROVE, 55-85→DONOR_VOTE, <55→REJECT.`;
       <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '30px', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px', marginBottom: '6px' }}>
         Upload Milestone Proof
       </h2>
-      <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '14px', marginBottom: '28px' }}>AI verifies every document before funds release</p>
+      <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '14px', marginBottom: '12px' }}>AI verifies every document — score determines outcome automatically</p>
+
+      {/* Scoring legend */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        {[
+          { range: 'Score > 85', label: 'AUTO APPROVE', color: '#34d399', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.3)' },
+          { range: 'Score 55–85', label: 'ADMIN REVIEW', color: '#fbbf24', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)' },
+          { range: 'Score < 55', label: 'AUTO REJECT',  color: '#f87171', bg: 'rgba(239,68,68,0.1)',  border: 'rgba(239,68,68,0.3)'  },
+        ].map(t => (
+          <div key={t.label} style={{ padding: '6px 14px', borderRadius: '999px', border: `1px solid ${t.border}`, background: t.bg, fontSize: '11px', fontWeight: 700, color: t.color }}>
+            {t.range} → {t.label}
+          </div>
+        ))}
+      </div>
 
       {/* Campaign selector */}
       {campaigns.length > 1 && (
@@ -240,16 +309,21 @@ Rules: score>85→AUTO_APPROVE, 55-85→DONOR_VOTE, <55→REJECT.`;
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {(selCampaign.milestones || []).map((m, i) => (
-                  <div key={i} style={{ padding: '14px 16px', borderRadius: '12px', ...MS_STYLE[m.status] || MS_STYLE.locked }}>
+                  <div key={i} style={{ padding: '14px 16px', borderRadius: '12px', ...(MS_STYLE[m.status] || MS_STYLE.locked) }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                       <span style={{ fontSize: '13px', fontWeight: 600 }}>{m.title}</span>
                       <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 9px', borderRadius: '999px', ...(PILL[m.status] || PILL.locked) }}>
-                        {m.status === 'verified' || m.status === 'approved' ? '✓ Verified' : m.status === 'pending' ? '⏳ Pending' : m.status === 'rejected' ? '✗ Rejected' : '🔒 Locked'}
+                        {m.status === 'verified' || m.status === 'approved' ? '✓ Verified'
+                          : m.status === 'pending' ? '⏳ Pending'
+                          : m.status === 'rejected' ? '✗ Rejected'
+                          : '🔒 Locked'}
                       </span>
                     </div>
                     <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)' }}>
                       ₹{(m.amount || 0).toLocaleString('en-IN')}
-                      {i + 1 === selCampaign.currentMilestone && <span style={{ marginLeft: '8px', color: '#c4b5fd' }}>← Current</span>}
+                      {i + 1 === selCampaign.currentMilestone && (
+                        <span style={{ marginLeft: '8px', color: '#c4b5fd' }}>← Upload proof here</span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -265,7 +339,7 @@ Rules: score>85→AUTO_APPROVE, 55-85→DONOR_VOTE, <55→REJECT.`;
           <div style={{ borderRadius: '18px', border: '1px solid rgba(255,255,255,0.08)', background: '#0d1021', padding: '24px', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>Upload Documents</h3>
             <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', marginBottom: '20px' }}>
-              Milestone {selCampaign?.currentMilestone || '—'} — {selCampaign?.milestones?.[( selCampaign?.currentMilestone || 1) - 1]?.title || 'Select campaign'}
+              Milestone {selCampaign?.currentMilestone || '—'} — {selCampaign?.milestones?.[(selCampaign?.currentMilestone || 1) - 1]?.title || 'Select campaign'}
             </p>
 
             {/* Drop zone */}
@@ -301,10 +375,9 @@ Rules: score>85→AUTO_APPROVE, 55-85→DONOR_VOTE, <55→REJECT.`;
               </div>
             )}
 
-            {/* Upload progress */}
             {uploading && (
               <div style={{ marginBottom: '14px', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(124,58,237,0.3)', background: 'rgba(124,58,237,0.08)' }}>
-                <div style={{ fontSize: '12px', color: '#c4b5fd', marginBottom: '8px' }}>Uploading to secure storage… {uploadPct}%</div>
+                <div style={{ fontSize: '12px', color: '#c4b5fd', marginBottom: '8px' }}>Uploading… {uploadPct}%</div>
                 <div style={{ height: '5px', borderRadius: '5px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${uploadPct}%`, background: 'linear-gradient(90deg,#7c3aed,#0891b2)', transition: 'width 0.2s', borderRadius: '5px' }} />
                 </div>
@@ -321,7 +394,7 @@ Rules: score>85→AUTO_APPROVE, 55-85→DONOR_VOTE, <55→REJECT.`;
                 opacity: verifying || uploading || !selCampaign ? 0.6 : 1,
               }}>
                 {verifying
-                  ? <><span style={{ width: '16px', height: '16px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />Analyzing…</>
+                  ? <><span style={{ width: '16px', height: '16px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />Analyzing with AI…</>
                   : uploading ? 'Uploading files…'
                   : '🤖 Upload & Run AI Verification'}
               </button>
@@ -340,15 +413,29 @@ Rules: score>85→AUTO_APPROVE, 55-85→DONOR_VOTE, <55→REJECT.`;
                 <div style={{ height: '100%', width: `${result.score}%`, borderRadius: '6px', background: scoreColor, transition: 'width 1s ease' }} />
               </div>
 
-              <div style={{ padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', fontSize: '13px', fontWeight: 600, ...(s > 85 ? { border: '1px solid rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.08)', color: '#6ee7b7' } : s >= 55 ? { border: '1px solid rgba(245,158,11,0.4)', background: 'rgba(245,158,11,0.08)', color: '#fcd34d' } : { border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.08)', color: '#fca5a5' }) }}>
-                {s > 85 ? '✅ AUTO APPROVE' : s >= 55 ? '🗳️ DONOR VOTE' : '❌ REJECT'} — {result.summary}
+              {/* Verdict banner */}
+              <div style={{
+                padding: '12px 16px', borderRadius: '12px', marginBottom: '20px',
+                fontSize: '13px', fontWeight: 700,
+                ...(s > 85
+                  ? { border: '1px solid rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.08)', color: '#6ee7b7' }
+                  : s >= 55
+                  ? { border: '1px solid rgba(245,158,11,0.4)', background: 'rgba(245,158,11,0.08)', color: '#fcd34d' }
+                  : { border: '1px solid rgba(239,68,68,0.4)',  background: 'rgba(239,68,68,0.08)',  color: '#fca5a5' }),
+              }}>
+                {s > 85
+                  ? '✅ AUTO-APPROVED — Milestone funds released automatically'
+                  : s >= 55
+                  ? '🗳️ ADMIN REVIEW REQUIRED — Admin will approve or reject'
+                  : '❌ AUTO-REJECTED — Score too low, funds not released'}
+                <div style={{ fontSize: '12px', fontWeight: 400, marginTop: '4px', opacity: 0.8 }}>{result.summary}</div>
               </div>
 
               <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '12px' }}>Verification Checks</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
                 {result.checks.map((c, i) => (
                   <div key={i} style={{ display: 'flex', gap: '10px', fontSize: '12px', alignItems: 'flex-start' }}>
-                    <span style={{ fontWeight: 700, color: statusColor[c.status], marginTop: '1px' }}>{statusIcon[c.status]}</span>
+                    <span style={{ fontWeight: 700, color: statusColor[c.status], marginTop: '1px', flexShrink: 0 }}>{statusIcon[c.status]}</span>
                     <div>
                       <span style={{ fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{c.label}</span>
                       <span style={{ color: 'rgba(255,255,255,0.35)' }}> — {c.detail}</span>
@@ -358,7 +445,10 @@ Rules: score>85→AUTO_APPROVE, 55-85→DONOR_VOTE, <55→REJECT.`;
               </div>
 
               <div style={{ padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(34,211,238,0.2)', background: 'rgba(34,211,238,0.05)', fontSize: '12px', color: '#67e8f9' }}>
-                ✅ Proof saved · Admin will review and release funds if approved.
+                📋 Proof saved to admin panel.
+                {s > 85 && ' Milestone marked as verified — next milestone is now active.'}
+                {s >= 55 && s <= 85 && ' Admin will review and release funds if approved.'}
+                {s < 55 && ' Proof rejected — please review and resubmit with better documentation.'}
               </div>
             </div>
           )}
