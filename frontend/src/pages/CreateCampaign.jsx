@@ -13,24 +13,6 @@ const CATEGORIES = [
   'Animal Welfare', 'Community Development', 'Other',
 ];
 
-/* ─── smart milestone suggestion ────────────────────── */
-function suggestMilestones(targetAmount) {
-  const n = Number(targetAmount);
-  if (!n || isNaN(n)) return 3;
-  if (n < 50000)  return 2;
-  if (n < 200000) return 3;
-  if (n < 1000000) return 4;
-  return 5;
-}
-
-const MILESTONE_INFO = {
-  2: { label: '2 milestones', desc: 'Best for urgent or short campaigns under ₹50,000', color: '#22d3ee' },
-  3: { label: '3 milestones', desc: 'Ideal general-purpose split — balanced accountability', color: '#10b981', recommended: true },
-  4: { label: '4 milestones', desc: 'Suited for mid-size campaigns with defined phases', color: '#a78bfa' },
-  5: { label: '5 milestones', desc: 'Large long-term projects with multiple tracked stages', color: '#f59e0b' },
-};
-
-/* ─── upload to Cloudinary ───────────────────────────── */
 function uploadImage(file, onProgress) {
   return new Promise((resolve, reject) => {
     const fd = new FormData();
@@ -52,28 +34,24 @@ function uploadImage(file, onProgress) {
   });
 }
 
-/* ─── styles ─────────────────────────────────────────── */
-const BASE_INPUT = {
+const INPUT = {
   width: '100%', padding: '11px 14px', borderRadius: '10px',
   background: '#111827', color: '#fff', fontSize: '14px',
-  outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s',
+  outline: 'none', boxSizing: 'border-box',
+  border: '1px solid rgba(255,255,255,0.12)', transition: 'border-color 0.2s',
 };
-const INPUT     = { ...BASE_INPUT, border: '1px solid rgba(255,255,255,0.12)' };
-const ERR_INPUT = { ...BASE_INPUT, border: '1px solid rgba(239,68,68,0.7)' };
-const LABEL     = { fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.4px', marginBottom: '6px', display: 'block' };
-const ERR_TEXT  = { fontSize: '11px', color: '#f87171', marginTop: '4px' };
-const SEC       = { fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '16px', paddingBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.06)' };
+const ERR_INPUT = { ...INPUT, border: '1px solid rgba(239,68,68,0.7)' };
+const LABEL = { fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.4px', marginBottom: '6px', display: 'block' };
+const ERR   = { fontSize: '11px', color: '#f87171', marginTop: '4px' };
+const SEC   = { fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '16px', paddingBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.06)' };
 
 function Field({ label, required, error, touched, hint, children }) {
   return (
     <div>
-      <label style={LABEL}>
-        {label}
-        {required && <span style={{ color: '#f87171', marginLeft: 4 }}>*</span>}
-      </label>
+      <label style={LABEL}>{label}{required && <span style={{ color: '#f87171', marginLeft: 4 }}>*</span>}</label>
       {hint && <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.28)', marginBottom: 6 }}>{hint}</div>}
       {children}
-      {error && touched && <div style={ERR_TEXT}>⚠ {error}</div>}
+      {error && touched && <div style={ERR}>⚠ {error}</div>}
     </div>
   );
 }
@@ -83,24 +61,32 @@ const VALIDATORS = {
   description:  v => !v.trim() ? 'Description is required' : v.trim().length < 50 ? 'At least 50 characters required' : null,
   targetAmount: v => { const n = Number(v); return (!v || isNaN(n) || n < 1000) ? 'Minimum target is ₹1,000' : null; },
   category:     v => !v ? 'Please select a category' : null,
-  milestones:   v => {
-    const n = Number(v);
-    if (!v || isNaN(n)) return 'Please select milestone count';
-    if (n < 2) return 'Minimum 2 milestones required — single-milestone campaigns are not allowed to prevent fraud';
-    if (n > 5) return 'Maximum 5 milestones — keeps admin review manageable';
-    return null;
-  },
-  deadline: v => {
+  milestones:   v => { const n = Number(v); return (!v || isNaN(n) || n < 1 || n > 10) ? 'Enter 1–10 milestones' : null; },
+  deadline:     v => {
     if (!v) return 'Deadline is required';
     const d = new Date(v);
-    if (isNaN(d.getTime())) return 'Invalid date';
-    // Allow today and future — emergencies may need same-day start
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    if (d < today) return 'Deadline cannot be in the past';
+    if (isNaN(d)) return 'Invalid date';
+    if (d <= new Date()) return 'Deadline must be in the future';
     return null;
   },
 };
+
+/* ── CRITICAL: compute milestone amounts as integers ──
+   Always use Math.floor and Number() to avoid NaN or strings
+   which would save as 0 in Firestore.                     */
+function buildMilestones(targetAmount, count) {
+  const total = Math.floor(Number(targetAmount));  // ensure integer
+  const n     = Math.floor(Number(count));
+  if (!total || !n || n < 1) return [];
+  const perMs = Math.floor(total / n);             // integer division
+  return Array.from({ length: n }, (_, i) => ({
+    no:     i + 1,
+    title:  `Milestone ${i + 1}`,
+    // Last milestone gets remainder so total is exact
+    amount: i === n - 1 ? total - perMs * (n - 1) : perMs,
+    status: i === 0 ? 'pending' : 'locked',
+  }));
+}
 
 export default function CreateCampaign() {
   const { user } = useAuth();
@@ -108,14 +94,15 @@ export default function CreateCampaign() {
 
   const [form, setForm] = useState({
     title: '', description: '', targetAmount: '',
-    category: '', milestones: '', deadline: '',
+    category: '', milestones: '3', deadline: '',
   });
   const [touched,   setTouched]   = useState({});
   const [imageFile, setImageFile] = useState(null);
   const [imageErr,  setImageErr]  = useState('');
   const [preview,   setPreview]   = useState('');
-  const [saving,    setSaving]    = useState(false);
-  const [uploadPct, setUploadPct] = useState(0);
+
+  const [saving,      setSaving]      = useState(false);
+  const [uploadPct,   setUploadPct]   = useState(0);
   const [uploadPhase, setUploadPhase] = useState('');
 
   const imgRef = useRef();
@@ -123,35 +110,10 @@ export default function CreateCampaign() {
   const setField = (k, v) => { setForm(f => ({ ...f, [k]: v })); setTouched(t => ({ ...t, [k]: true })); };
   const getErr   = k => VALIDATORS[k]?.(form[k]) ?? null;
 
-  // Derive smart suggestion from current target amount
-  const suggestion = suggestMilestones(form.targetAmount);
-
-  // Per-milestone amount preview
-  const milestoneAmounts = (() => {
-    const n = Number(form.milestones);
-    const t = Number(form.targetAmount);
-    if (!n || !t || isNaN(n) || isNaN(t) || getErr('milestones') || getErr('targetAmount')) return [];
-    const per = Math.floor(t / n);
-    return Array.from({ length: n }, (_, i) => ({
-      no: i + 1,
-      amount: i === n - 1 ? t - per * (n - 1) : per,
-    }));
-  })();
-
-  // Warn if milestone count seems excessive for the amount
-  const milestoneWarning = (() => {
-    const n = Number(form.milestones);
-    const t = Number(form.targetAmount);
-    if (!n || !t || isNaN(n) || isNaN(t)) return null;
-    const per = Math.floor(t / n);
-    if (per < 5000) return `Each milestone would be only ₹${per.toLocaleString('en-IN')} — consider fewer milestones for this amount.`;
-    return null;
-  })();
-
   const handleImage = file => {
     if (!file) return;
     if (!file.type.startsWith('image/')) { setImageErr('Only images allowed'); return; }
-    if (file.size > 5 * 1024 * 1024) { setImageErr('Max 5 MB'); return; }
+    if (file.size > 5 * 1024 * 1024)    { setImageErr('Max 5 MB'); return; }
     setImageErr('');
     setImageFile(file);
     setPreview(URL.createObjectURL(file));
@@ -171,21 +133,14 @@ export default function CreateCampaign() {
       }
 
       setUploadPhase('Saving campaign…');
-      const count = Number(form.milestones);
-      const total = Number(form.targetAmount);
-      const per   = Math.floor(total / count);
 
-      const milestoneList = Array.from({ length: count }, (_, i) => ({
-        no:     i + 1,
-        title:  `Milestone ${i + 1}`,
-        amount: i === count - 1 ? total - per * (count - 1) : per,
-        status: i === 0 ? 'pending' : 'locked',
-      }));
+      // ── Build milestones with correct integer amounts ──
+      const milestoneList = buildMilestones(form.targetAmount, form.milestones);
 
       await addDoc(collection(db, 'campaigns'), {
         title:            form.title.trim(),
         description:      form.description.trim(),
-        targetAmount:     total,
+        targetAmount:     Number(form.targetAmount),   // always Number
         raisedAmount:     0,
         donorCount:       0,
         category:         form.category,
@@ -208,8 +163,12 @@ export default function CreateCampaign() {
     }
   };
 
-  // Allow today as earliest deadline (emergency campaigns)
-  const todayStr = new Date().toISOString().split('T')[0];
+  // Preview milestone breakdown
+  const milestonePreview = !getErr('targetAmount') && !getErr('milestones')
+    ? buildMilestones(form.targetAmount, form.milestones)
+    : [];
+
+  const today = new Date().toISOString().split('T')[0];
 
   return (
     <div style={{ minHeight: 'calc(100vh - 68px)', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', padding: '48px 16px 80px' }}>
@@ -219,19 +178,14 @@ export default function CreateCampaign() {
           ← Back to Dashboard
         </button>
 
-        <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#22d3ee', marginBottom: '8px' }}>
-          Campaign Creation
-        </div>
-        <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px', marginBottom: '6px' }}>
-          Create a new campaign
-        </h2>
+        <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#22d3ee', marginBottom: '8px' }}>Campaign Creation</div>
+        <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '28px', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px', marginBottom: '6px' }}>Create a new campaign</h2>
         <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', marginBottom: '32px', lineHeight: 1.6 }}>
           Set your fundraising goal, define milestones, and start receiving verified donations.
         </p>
 
         <div style={{ borderRadius: '20px', border: '1px solid rgba(255,255,255,0.08)', background: '#0d1021', padding: '32px' }}>
 
-          {/* ── Campaign details ── */}
           <div style={SEC}>Campaign details</div>
 
           <div style={{ marginBottom: '16px' }}>
@@ -261,151 +215,59 @@ export default function CreateCampaign() {
             </Field>
           </div>
 
-          {/* ── Milestone selector ── */}
-          <div style={{ marginBottom: '16px' }}>
-            <label style={LABEL}>
-              Number of milestones <span style={{ color: '#f87171' }}>*</span>
-            </label>
-            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.28)', marginBottom: '10px' }}>
-              Funds are released one milestone at a time after AI verification. Minimum 2, maximum 5.
-            </div>
-
-            {/* Smart suggestion banner */}
-            {form.targetAmount && !getErr('targetAmount') && (
-              <div style={{
-                padding: '10px 14px', borderRadius: '10px', marginBottom: '12px',
-                border: '1px solid rgba(34,211,238,0.25)', background: 'rgba(34,211,238,0.06)',
-                fontSize: '12px', color: '#67e8f9',
-              }}>
-                💡 For ₹{Number(form.targetAmount).toLocaleString('en-IN')}, we suggest <strong>{suggestion} milestones</strong>
-              </div>
-            )}
-
-            {/* Milestone radio cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-              {[2, 3, 4, 5].map(n => {
-                const info     = MILESTONE_INFO[n];
-                const isActive = form.milestones === String(n);
-                const isSugg   = suggestion === n && !getErr('targetAmount') && form.targetAmount;
-                return (
-                  <button key={n}
-                    onClick={() => setField('milestones', String(n))}
-                    style={{
-                      padding: '14px 10px', borderRadius: '12px', cursor: 'pointer',
-                      border: isActive
-                        ? `1.5px solid ${info.color}`
-                        : isSugg
-                        ? '1.5px solid rgba(255,255,255,0.2)'
-                        : '1px solid rgba(255,255,255,0.08)',
-                      background: isActive ? `${info.color}18` : isSugg ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.02)',
-                      transition: 'all 0.18s', outline: 'none', textAlign: 'center',
-                    }}>
-                    {/* Number badge */}
-                    <div style={{
-                      width: '36px', height: '36px', borderRadius: '50%', margin: '0 auto 8px',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: '18px', fontWeight: 800, fontFamily: "'Playfair Display', Georgia, serif",
-                      background: isActive ? `${info.color}30` : 'rgba(255,255,255,0.06)',
-                      color: isActive ? info.color : 'rgba(255,255,255,0.5)',
-                      border: isActive ? `1px solid ${info.color}50` : '1px solid rgba(255,255,255,0.1)',
-                    }}>{n}</div>
-
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: isActive ? '#fff' : 'rgba(255,255,255,0.5)', marginBottom: '4px' }}>
-                      {n} milestone{n > 1 ? 's' : ''}
-                    </div>
-
-                    {/* Recommended tag */}
-                    {isSugg && (
-                      <div style={{ fontSize: '9px', fontWeight: 700, padding: '2px 6px', borderRadius: '999px', display: 'inline-block', background: `${info.color}25`, color: info.color, border: `1px solid ${info.color}40`, marginBottom: '4px' }}>
-                        suggested
-                      </div>
-                    )}
-
-                    <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.25)', lineHeight: 1.4 }}>
-                      {info.desc.split('—')[0]}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            {getErr('milestones') && touched.milestones && (
-              <div style={ERR_TEXT}>⚠ {getErr('milestones')}</div>
-            )}
-          </div>
-
-          {/* Why 1 is blocked — educational note */}
-          <div style={{
-            padding: '12px 14px', borderRadius: '10px', marginBottom: '16px',
-            border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.04)',
-            fontSize: '12px', color: 'rgba(255,255,255,0.4)', lineHeight: 1.6,
-          }}>
-            🛡️ <strong style={{ color: '#fca5a5' }}>1 milestone not allowed.</strong> Single-milestone campaigns allow full fund release with just one proof upload — a known fraud vector. Minimum 2 ensures staged accountability.
-          </div>
-
-          {/* Deadline */}
-          <div style={{ marginBottom: '16px' }}>
-            <Field label="Campaign deadline" required error={getErr('deadline')} touched={touched.deadline}
-              hint="Emergency campaigns can end today or this week — any future or current date is allowed">
-              <input type="date"
-                min={todayStr}
-                value={form.deadline}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+            <Field label="Number of milestones" required error={getErr('milestones')} touched={touched.milestones}
+              hint="Funds release one milestone at a time after AI verification">
+              <input type="number" min="1" max="10" value={form.milestones}
+                onChange={e => setField('milestones', e.target.value)}
+                onBlur={() => setTouched(t => ({ ...t, milestones: true }))}
+                placeholder="e.g. 3"
+                style={getErr('milestones') && touched.milestones ? ERR_INPUT : INPUT} />
+            </Field>
+            <Field label="Campaign deadline" required error={getErr('deadline')} touched={touched.deadline}>
+              <input type="date" min={today} value={form.deadline}
                 onChange={e => setField('deadline', e.target.value)}
                 onBlur={() => setTouched(t => ({ ...t, deadline: true }))}
                 style={{ ...(getErr('deadline') && touched.deadline ? ERR_INPUT : INPUT), colorScheme: 'dark' }} />
             </Field>
           </div>
 
-          {/* Milestone breakdown preview */}
-          {milestoneAmounts.length > 0 && (
-            <div style={{
-              padding: '16px 18px', borderRadius: '14px', marginBottom: '16px',
-              border: '1px solid rgba(34,211,238,0.2)', background: 'rgba(34,211,238,0.04)',
-            }}>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: '#67e8f9', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '12px' }}>
-                Milestone breakdown
+          {/* Live milestone breakdown preview */}
+          {milestonePreview.length > 0 && (
+            <div style={{ marginBottom: '16px', padding: '14px 16px', borderRadius: '12px', border: '1px solid rgba(34,211,238,0.2)', background: 'rgba(34,211,238,0.05)' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#67e8f9', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '10px' }}>
+                Milestone breakdown (amounts are correct integers)
               </div>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: milestoneWarning ? '12px' : 0 }}>
-                {milestoneAmounts.map(m => (
-                  <div key={m.no} style={{
-                    padding: '8px 14px', borderRadius: '10px',
-                    background: 'rgba(34,211,238,0.1)', border: '1px solid rgba(34,211,238,0.2)',
-                    fontSize: '13px', fontWeight: 600, color: '#67e8f9',
-                  }}>
-                    <span style={{ opacity: 0.6, fontSize: '11px' }}>M{m.no}  </span>
-                    ₹{m.amount.toLocaleString('en-IN')}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {milestonePreview.map((m, i) => (
+                  <div key={i} style={{ padding: '6px 12px', borderRadius: '8px', background: 'rgba(34,211,238,0.1)', border: '1px solid rgba(34,211,238,0.2)', fontSize: '12px', color: '#67e8f9' }}>
+                    M{i + 1}: ₹{m.amount.toLocaleString('en-IN')}
                   </div>
                 ))}
               </div>
-              {milestoneWarning && (
-                <div style={{ fontSize: '12px', color: '#fcd34d', marginTop: '10px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
-                  ⚠ {milestoneWarning}
-                </div>
-              )}
-              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.25)', marginTop: '10px', lineHeight: 1.6 }}>
-                Each milestone releases only after the NGO uploads proof and AI verification passes. Funds are locked until then.
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.25)', marginTop: '8px' }}>
+                Total: ₹{milestonePreview.reduce((s, m) => s + m.amount, 0).toLocaleString('en-IN')}
               </div>
             </div>
           )}
 
           <div style={{ marginBottom: '28px' }}>
             <Field label="Description" required error={getErr('description')} touched={touched.description}
-              hint={`${form.description.trim().length}/50 characters minimum — explain the need, beneficiary, and how funds will be used`}>
+              hint={`${form.description.trim().length}/50 characters minimum`}>
               <textarea rows={5} value={form.description}
                 onChange={e => setField('description', e.target.value)}
                 onBlur={() => setTouched(t => ({ ...t, description: true }))}
-                placeholder="Describe your campaign in detail — the beneficiary, the urgent need, and exactly how each milestone's funds will be used…"
+                placeholder="Describe your campaign in detail — the beneficiary, the need, how funds will be used…"
                 style={{ ...(getErr('description') && touched.description ? ERR_INPUT : INPUT), resize: 'vertical', lineHeight: 1.65 }} />
             </Field>
           </div>
 
-          {/* ── Campaign image ── */}
-          <div style={SEC}>Campaign image (optional)</div>
+          <div style={SEC}>Campaign image</div>
+
           <div style={{ marginBottom: '28px' }}>
-            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.28)', marginBottom: '10px' }}>
-              Shown on the campaigns page. JPG, PNG — max 5 MB. If skipped, a category icon is shown instead.
-            </div>
-            <input ref={imgRef} type="file" accept="image/*" style={{ display: 'none' }}
-              onChange={e => handleImage(e.target.files[0])} />
+            <label style={LABEL}>Banner image <span style={{ color: 'rgba(255,255,255,0.25)', fontSize: '11px' }}>(optional)</span></label>
+            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.28)', marginBottom: '8px' }}>Shown on the campaigns page. JPG, PNG — max 5 MB.</div>
+            <input ref={imgRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleImage(e.target.files[0])} />
 
             {preview ? (
               <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', marginBottom: '8px' }}>
@@ -425,10 +287,9 @@ export default function CreateCampaign() {
                 <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)' }}>Click to upload banner image</div>
               </div>
             )}
-            {imageErr && <div style={ERR_TEXT}>⚠ {imageErr}</div>}
+            {imageErr && <div style={ERR}>⚠ {imageErr}</div>}
           </div>
 
-          {/* Upload progress */}
           {saving && (
             <div style={{ marginBottom: '16px', padding: '14px 16px', borderRadius: '12px', border: '1px solid rgba(124,58,237,0.3)', background: 'rgba(124,58,237,0.08)' }}>
               <div style={{ fontSize: '13px', color: '#c4b5fd', marginBottom: '8px' }}>{uploadPhase}</div>

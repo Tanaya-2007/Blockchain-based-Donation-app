@@ -53,12 +53,13 @@ function AppRoutes() {
             {/* ── ANY LOGGED-IN USER ── */}
             <Route element={<RequireAuth />}>
               <Route path="/account"         element={<DonorDashboard />} />
-              <Route path="/ngo"             element={<NgoDashboard />} />
               <Route path="/create-campaign" element={<CreateCampaign />} />
+              {/* /ngo — NgoDashboard internally redirects admin → /admin */}
+              <Route path="/ngo"             element={<NgoDashboard />} />
             </Route>
 
-            {/* ── NGO + ADMIN only ── */}
-            <Route element={<RequireAuth allowRoles={['ngo', 'admin']} />}>
+            {/* ── NGO ONLY — admin has no campaigns, remove admin from here ── */}
+            <Route element={<RequireAuth allowRoles={['ngo']} />}>
               <Route path="/proof" element={<ProofUpload onToast={showToast} />} />
             </Route>
 
@@ -67,7 +68,6 @@ function AppRoutes() {
               <Route path="/admin" element={<AdminPanel />} />
             </Route>
 
-            {/* ── wildcard MUST be last ── */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>

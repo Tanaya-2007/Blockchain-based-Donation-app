@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   addDoc, collection, doc, getDocs, query,
-  serverTimestamp, updateDoc, where,
+  serverTimestamp, updateDoc, where, orderBy,
 } from 'firebase/firestore';
 import { useAuth } from '../auth/useAuth';
 import { db } from '../firebase';
@@ -9,18 +9,57 @@ import { db } from '../firebase';
 const CLOUD_NAME    = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
-/* ─── upload to Cloudinary — NO eager param ─────────── */
+/* ─── normalize Firestore milestones ─────────────────────
+   Firestore dot-notation updates turn arrays into objects
+   {0:{},1:{}}. Always convert back to array before .map() */
+function normalizeMilestones(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (!raw) return [];
+  return Object.keys(raw)
+    .sort((a, b) => Number(a) - Number(b))
+    .map(k => raw[k]);
+}
+
+function safeCampaign(raw) {
+  if (!raw) return null;
+  const c = { ...raw, milestones: normalizeMilestones(raw.milestones) };
+  // Fix: ensure every milestone amount is a real number, not 0 from bad save
+  // (old campaigns may have amount:0 — we re-derive from targetAmount if so)
+  const total = Number(c.targetAmount) || 0;
+  const n     = c.milestones.length;
+  if (n > 0 && total > 0 && c.milestones.every(m => !m.amount || m.amount === 0)) {
+    const per = Math.floor(total / n);
+    c.milestones = c.milestones.map((m, i) => ({
+      ...m,
+      amount: i === n - 1 ? total - per * (n - 1) : per,
+    }));
+  }
+  return c;
+}
+
+/* ─── document hints per milestone index ─────────────── */
+const MILESTONE_DOC_HINTS = [
+  'Upload: Hospital invoice / Admission letter / Medical report with date and patient name',
+  "Upload: Surgery completion certificate / Discharge summary / Doctor's report",
+  'Upload: Post-surgery recovery report / Final medical bill with payment receipt',
+  'Upload: Patient testimonial / Final outcome report / Thank you letter from hospital',
+  'Upload: Progress report / Receipt / Any official document proving milestone completion',
+];
+const getMilestoneDocHint = i =>
+  MILESTONE_DOC_HINTS[i] || MILESTONE_DOC_HINTS[MILESTONE_DOC_HINTS.length - 1];
+
+/* ─── Cloudinary upload — NO eager param ─────────────── */
 function uploadToCloudinary(file, onProgress) {
   return new Promise((resolve, reject) => {
     const fd = new FormData();
     fd.append('file', file);
     fd.append('upload_preset', UPLOAD_PRESET);
     fd.append('folder', 'milestoneProofs');
-    // ⚠️ DO NOT add 'eager' — unsigned presets forbid it
-
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`);
-    xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
+    xhr.upload.onprogress = e => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
     xhr.onload = () => {
       try {
         const r = JSON.parse(xhr.responseText);
@@ -35,28 +74,37 @@ function uploadToCloudinary(file, onProgress) {
 
 /* ─── styles ─────────────────────────────────────────── */
 const MS_STYLE = {
-  verified: { border: '1px solid rgba(16,185,129,0.4)',  background: 'rgba(16,185,129,0.06)',  color: '#6ee7b7' },
-  approved: { border: '1px solid rgba(16,185,129,0.4)',  background: 'rgba(16,185,129,0.06)',  color: '#6ee7b7' },
-  pending:  { border: '1px solid rgba(124,58,237,0.45)', background: 'rgba(124,58,237,0.1)',   color: '#c4b5fd' },
-  locked:   { border: '1px solid rgba(255,255,255,0.08)',background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.3)' },
-  rejected: { border: '1px solid rgba(239,68,68,0.35)',  background: 'rgba(239,68,68,0.06)',   color: '#fca5a5' },
+  verified:             { border: '1px solid rgba(16,185,129,0.4)',   background: 'rgba(16,185,129,0.06)',  color: '#6ee7b7' },
+  approved:             { border: '1px solid rgba(16,185,129,0.4)',   background: 'rgba(16,185,129,0.06)',  color: '#6ee7b7' },
+  pending_admin_review: { border: '1px solid rgba(245,158,11,0.45)', background: 'rgba(245,158,11,0.08)', color: '#fcd34d' },
+  pending:              { border: '1px solid rgba(124,58,237,0.45)', background: 'rgba(124,58,237,0.1)',  color: '#c4b5fd' },
+  locked:               { border: '1px solid rgba(255,255,255,0.08)',background: 'rgba(255,255,255,0.03)',color: 'rgba(255,255,255,0.3)' },
+  rejected:             { border: '1px solid rgba(239,68,68,0.35)',  background: 'rgba(239,68,68,0.06)',  color: '#fca5a5' },
 };
 const PILL = {
-  verified: { background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.3)' },
-  approved: { background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.3)' },
-  pending:  { background: 'rgba(245,158,11,0.15)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.3)' },
-  locked:   { background: 'rgba(255,255,255,0.05)',color: 'rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.08)' },
-  rejected: { background: 'rgba(239,68,68,0.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)' },
+  verified:             { background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.3)'  },
+  approved:             { background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.3)'  },
+  pending_admin_review: { background: 'rgba(245,158,11,0.15)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.3)' },
+  pending:              { background: 'rgba(245,158,11,0.15)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.3)'  },
+  locked:               { background: 'rgba(255,255,255,0.05)',color: 'rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.08)' },
+  rejected:             { background: 'rgba(239,68,68,0.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)'   },
 };
 
 const statusIcon  = { PASS: '✓', WARN: '⚠', FAIL: '✗' };
 const statusColor = { PASS: '#34d399', WARN: '#fbbf24', FAIL: '#f87171' };
 
-/* ─── derive Firestore proof status from AI score ────── */
 function deriveStatus(score) {
-  if (score > 85)  return 'approved';            // auto-approve
-  if (score >= 55) return 'pending_admin_review'; // needs admin
-  return 'rejected';                              // auto-reject
+  if (score > 85)  return 'approved';
+  if (score >= 55) return 'pending_admin_review';
+  return 'rejected';
+}
+
+function getPillLabel(status) {
+  if (status === 'verified' || status === 'approved') return '✓ Verified';
+  if (status === 'pending_admin_review')              return '⏳ Under Review';
+  if (status === 'pending')                           return '⏳ Pending';
+  if (status === 'rejected')                          return '✗ Rejected';
+  return '🔒 Locked';
 }
 
 export default function ProofUpload({ onToast }) {
@@ -66,6 +114,12 @@ export default function ProofUpload({ onToast }) {
   const [campaigns,    setCampaigns]    = useState([]);
   const [selCampaign,  setSelCampaign]  = useState(null);
   const [loadingCamps, setLoadingCamps] = useState(true);
+
+  /* ── KEY FIX: persisted proof status loaded from Firestore on mount ──
+     Previously this was React state only, so it reset on every refresh.
+     Now we query the proofs collection on load and pre-fill this map.
+     Structure: { [campaignId]: { milestoneNo, status, aiScore } }      */
+  const [submittedProofs, setSubmittedProofs] = useState({});
 
   const [uploaded,  setUploaded]  = useState([]);
   const [fileObjs,  setFileObjs]  = useState([]);
@@ -78,24 +132,66 @@ export default function ProofUpload({ onToast }) {
   const [imgBase64, setImgBase64] = useState(null);
   const [imgType,   setImgType]   = useState(null);
 
-  /* ── load NGO's campaigns ── */
+  /* ── Load campaigns + existing proofs from Firestore ── */
   useEffect(() => {
     if (!user) return;
     (async () => {
       setLoadingCamps(true);
       try {
-        const snap = await getDocs(query(collection(db, 'campaigns'), where('ngoId', '==', user.uid)));
-        const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // 1. Load this NGO's campaigns
+        const campSnap = await getDocs(
+          query(collection(db, 'campaigns'), where('ngoId', '==', user.uid))
+        );
+        const list = campSnap.docs.map(d => safeCampaign({ id: d.id, ...d.data() }));
         setCampaigns(list);
         if (list.length === 1) setSelCampaign(list[0]);
+
+        // 2. Load existing proofs for this NGO — survives refresh
+        //    Get the most recent proof per campaign (by milestoneNo desc)
+        const proofSnap = await getDocs(
+          query(
+            collection(db, 'proofs'),
+            where('ngoId', '==', user.uid),
+            orderBy('uploadedAt', 'desc'),
+          )
+        );
+        const proofMap = {};
+        proofSnap.docs.forEach(d => {
+          const p = d.data();
+          const campId = p.campaignId;
+          if (!campId) return;
+          // Keep only the most recent proof per campaign (first one we see, since sorted desc)
+          if (!proofMap[campId]) {
+            proofMap[campId] = {
+              milestoneNo: p.milestoneNo,
+              status:      p.status,
+              aiScore:     p.aiScore,
+            };
+          }
+        });
+        setSubmittedProofs(proofMap);
       } catch (e) { console.error(e); }
       setLoadingCamps(false);
     })();
   }, [user]);
 
+  const handleCampaignChange = campId => {
+    const found = campaigns.find(c => c.id === campId) || null;
+    setSelCampaign(found);
+    setUploaded([]);
+    setFileObjs([]);
+    setResult(null);
+    setImgBase64(null);
+    setImgType(null);
+  };
+
   const handleFile = file => {
     if (!file) return;
-    setUploaded(prev => [...prev, { name: file.name, size: (file.size / 1024 / 1024).toFixed(1) + ' MB', icon: '📄' }]);
+    setUploaded(prev => [...prev, {
+      name: file.name,
+      size: (file.size / 1024 / 1024).toFixed(1) + ' MB',
+      icon: '📄',
+    }]);
     setFileObjs(prev => [...prev, file]);
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
@@ -104,13 +200,13 @@ export default function ProofUpload({ onToast }) {
     }
   };
 
-  /* ── save proof to Firestore with correct status ── */
+  /* ── Save proof to Firestore + update campaign state ── */
   const saveProof = async (fileUrls, aiResult) => {
     if (!selCampaign) return;
     const currentMs = selCampaign.currentMilestone || 1;
     const status    = deriveStatus(aiResult?.score ?? 0);
 
-    const proofRef = await addDoc(collection(db, 'proofs'), {
+    await addDoc(collection(db, 'proofs'), {
       campaignId:    selCampaign.id,
       campaignTitle: selCampaign.title || '',
       ngoId:         user.uid,
@@ -124,27 +220,37 @@ export default function ProofUpload({ onToast }) {
       uploadedAt:    serverTimestamp(),
     });
 
-    // If auto-approved (score > 85): immediately advance milestone
     if (status === 'approved') {
       const msIndex = currentMs - 1;
-      const campRef = doc(db, 'campaigns', selCampaign.id);
-      await updateDoc(campRef, {
+      await updateDoc(doc(db, 'campaigns', selCampaign.id), {
         [`milestones.${msIndex}.status`]: 'verified',
         currentMilestone: currentMs + 1,
       });
+
+      // Update local state — normalize to prevent .map() crash
+      const updateCamp = camp => {
+        const milestones = normalizeMilestones(camp.milestones).map((m, i) =>
+          i === msIndex ? { ...m, status: 'verified' } : m
+        );
+        return { ...camp, milestones, currentMilestone: currentMs + 1 };
+      };
+      setSelCampaign(prev => prev ? updateCamp(prev) : prev);
+      setCampaigns(prev => prev.map(c => c.id === selCampaign.id ? updateCamp(c) : c));
     }
 
-    // If auto-rejected (score < 55): mark proof as rejected, no admin review needed
-    // Nothing extra needed — status is already 'rejected' in Firestore
-
-    return proofRef;
+    // Persist to submittedProofs — will survive campaign switch but not refresh
+    // (refresh is now handled by the Firestore load in useEffect above)
+    setSubmittedProofs(prev => ({
+      ...prev,
+      [selCampaign.id]: { milestoneNo: currentMs, status, aiScore: aiResult?.score },
+    }));
   };
 
+  /* ── Main verification flow ── */
   const runVerification = async () => {
     if (fileObjs.length === 0) { onToast('Upload at least one file first', 'error'); return; }
     if (!selCampaign)          { onToast('Select a campaign first', 'error'); return; }
 
-    // 1. Upload files to Cloudinary
     setUploading(true);
     setUploadPct(0);
     const fileUrls = [];
@@ -163,63 +269,48 @@ export default function ProofUpload({ onToast }) {
     setUploading(false);
     setUploadPct(100);
 
-    // 2. Run AI verification
     setVerifying(true);
     setResult(null);
 
-    const ms = selCampaign?.currentMilestone || 1;
+    const ms     = selCampaign.currentMilestone || 1;
+    const msList = normalizeMilestones(selCampaign.milestones);
+    const msAmt  = msList[ms - 1]?.amount || 0;
+
     const prompt = `You are TransparentFund's AI document verification engine.
 
-Campaign: "${selCampaign?.title || 'Unknown'}"
-Milestone: ${ms} of ${selCampaign?.milestones?.length || '?'}
-Amount: ₹${(selCampaign?.milestones?.[ms - 1]?.amount || 0).toLocaleString('en-IN')}
+Campaign: "${selCampaign.title || 'Unknown'}"
+Milestone: ${ms} of ${msList.length || '?'}
+Amount to release: ₹${msAmt.toLocaleString('en-IN')}
 
-Scoring rules (STRICT):
-- score > 85  → verdict = "AUTO_APPROVE"  (funds released automatically)
-- score 55-85 → verdict = "DONOR_VOTE"    (admin review required before release)
-- score < 55  → verdict = "REJECT"        (auto-rejected, no funds released)
+Scoring rules:
+- score > 85  → verdict = "AUTO_APPROVE"
+- score 55-85 → verdict = "DONOR_VOTE"
+- score < 55  → verdict = "REJECT"
 
-Analyze the uploaded document image and return ONLY valid JSON (no markdown, no backticks):
-{
-  "score": <0-100>,
-  "verdict": "<AUTO_APPROVE|DONOR_VOTE|REJECT>",
-  "summary": "<one sentence explaining the decision>",
-  "checks": [
-    {"label": "AI/Forgery Detection",      "status": "<PASS|WARN|FAIL>", "detail": "<specific finding>"},
-    {"label": "Document Authenticity",     "status": "<PASS|WARN|FAIL>", "detail": "<specific finding>"},
-    {"label": "Organisation Verification", "status": "<PASS|WARN|FAIL>", "detail": "<specific finding>"},
-    {"label": "Amount Consistency",        "status": "<PASS|WARN|FAIL>", "detail": "<specific finding>"},
-    {"label": "Date & Timeline",           "status": "<PASS|WARN|FAIL>", "detail": "<specific finding>"},
-    {"label": "Format Integrity",          "status": "<PASS|WARN|FAIL>", "detail": "<specific finding>"}
-  ]
-}`;
+Analyze the uploaded document and return ONLY valid JSON (no markdown):
+{"score":<0-100>,"verdict":"<AUTO_APPROVE|DONOR_VOTE|REJECT>","summary":"<one sentence>","checks":[{"label":"AI/Forgery Detection","status":"<PASS|WARN|FAIL>","detail":"<finding>"},{"label":"Document Authenticity","status":"<PASS|WARN|FAIL>","detail":"<finding>"},{"label":"Organisation Verification","status":"<PASS|WARN|FAIL>","detail":"<finding>"},{"label":"Amount Consistency","status":"<PASS|WARN|FAIL>","detail":"<finding>"},{"label":"Date & Timeline","status":"<PASS|WARN|FAIL>","detail":"<finding>"},{"label":"Format Integrity","status":"<PASS|WARN|FAIL>","detail":"<finding>"}]}`;
 
     let aiResult = null;
     try {
       const content = imgBase64
         ? [
             { type: 'image', source: { type: 'base64', media_type: imgType, data: imgBase64 } },
-            { type: 'text', text: prompt },
+            { type: 'text',  text: prompt },
           ]
         : prompt + '\n\nNo image provided — score 60, verdict DONOR_VOTE.';
 
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const res  = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{ role: 'user', content }],
-        }),
+        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content }] }),
       });
       const data = await res.json();
       const raw  = data.content?.[0]?.text ?? '';
       aiResult   = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
     } catch {
-      // Fallback if API fails
       aiResult = {
         score: 72, verdict: 'DONOR_VOTE',
-        summary: 'Document assessed — requires admin review due to limited verification context.',
+        summary: 'Document assessed — requires admin review.',
         checks: [
           { label: 'AI/Forgery Detection',      status: 'PASS', detail: 'No manipulation detected' },
           { label: 'Document Authenticity',     status: 'WARN', detail: 'Could not fully verify issuer' },
@@ -232,26 +323,33 @@ Analyze the uploaded document image and return ONLY valid JSON (no markdown, no 
     }
 
     setResult(aiResult);
+    try { await saveProof(fileUrls, aiResult); } catch (e) { console.error('saveProof failed:', e); }
 
-    // 3. Save to Firestore with auto-approve/reject/review status
-    try {
-      await saveProof(fileUrls, aiResult);
-    } catch (e) {
-      console.error('saveProof failed:', e);
-    }
-
-    const statusLabel = aiResult.score > 85
+    const label = aiResult.score > 85
       ? '✅ AUTO-APPROVED — milestone funds released!'
       : aiResult.score >= 55
       ? '🗳️ Sent to admin review'
       : '❌ AUTO-REJECTED — score too low';
 
-    onToast(`🤖 ${aiResult.score}% confidence · ${statusLabel}`, aiResult.score >= 55 ? 'success' : 'error');
+    onToast(`🤖 ${aiResult.score}% confidence · ${label}`, aiResult.score >= 55 ? 'success' : 'error');
     setVerifying(false);
   };
 
-  const s = result?.score ?? 0;
-  const scoreColor = s > 85 ? '#34d399' : s >= 55 ? '#fbbf24' : '#f87171';
+  /* ── Derived display values ── */
+  const safeMilestones  = normalizeMilestones(selCampaign?.milestones);
+  const currentMsIndex  = (selCampaign?.currentMilestone || 1) - 1;
+  const currentMsTitle  = safeMilestones[currentMsIndex]?.title || '';
+  // Amount for the PREVIOUS milestone (what was just released)
+  const prevMsData      = currentMsIndex > 0 ? safeMilestones[currentMsIndex - 1] : null;
+  const prevMsAmount    = prevMsData?.amount || 0;
+  const isFirstMs       = currentMsIndex === 0;
+  const submittedProof  = selCampaign ? submittedProofs[selCampaign.id] : null;
+  const s               = result?.score ?? 0;
+  const scoreColor      = s > 85 ? '#34d399' : s >= 55 ? '#fbbf24' : '#f87171';
+
+  // Has the current milestone already been submitted (proof exists for it)?
+  const currentMsAlreadySubmitted = submittedProof &&
+    submittedProof.milestoneNo === (selCampaign?.currentMilestone || 1);
 
   if (!loadingCamps && campaigns.length === 0) {
     return (
@@ -270,14 +368,16 @@ Analyze the uploaded document image and return ONLY valid JSON (no markdown, no 
       <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '30px', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px', marginBottom: '6px' }}>
         Upload Milestone Proof
       </h2>
-      <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '14px', marginBottom: '12px' }}>AI verifies every document — score determines outcome automatically</p>
+      <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '14px', marginBottom: '12px' }}>
+        AI verifies every document — score determines outcome automatically
+      </p>
 
       {/* Scoring legend */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', flexWrap: 'wrap' }}>
         {[
-          { range: 'Score > 85', label: 'AUTO APPROVE', color: '#34d399', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.3)' },
-          { range: 'Score 55–85', label: 'ADMIN REVIEW', color: '#fbbf24', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)' },
-          { range: 'Score < 55', label: 'AUTO REJECT',  color: '#f87171', bg: 'rgba(239,68,68,0.1)',  border: 'rgba(239,68,68,0.3)'  },
+          { range: 'Score > 85',  label: 'AUTO APPROVE', color: '#34d399', bg: 'rgba(16,185,129,0.1)',  border: 'rgba(16,185,129,0.3)'  },
+          { range: 'Score 55–85', label: 'ADMIN REVIEW', color: '#fbbf24', bg: 'rgba(245,158,11,0.1)',  border: 'rgba(245,158,11,0.3)'  },
+          { range: 'Score < 55',  label: 'AUTO REJECT',  color: '#f87171', bg: 'rgba(239,68,68,0.1)',   border: 'rgba(239,68,68,0.3)'   },
         ].map(t => (
           <div key={t.label} style={{ padding: '6px 14px', borderRadius: '999px', border: `1px solid ${t.border}`, background: t.bg, fontSize: '11px', fontWeight: 700, color: t.color }}>
             {t.range} → {t.label}
@@ -287,46 +387,112 @@ Analyze the uploaded document image and return ONLY valid JSON (no markdown, no 
 
       {/* Campaign selector */}
       {campaigns.length > 1 && (
-        <div style={{ marginBottom: '24px' }}>
+        <div style={{ marginBottom: '16px' }}>
           <label style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '8px' }}>Select campaign</label>
-          <select value={selCampaign?.id || ''} onChange={e => setSelCampaign(campaigns.find(c => c.id === e.target.value) || null)}
-            style={{ padding: '11px 14px', borderRadius: '10px', background: '#111827', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', fontSize: '14px', outline: 'none', cursor: 'pointer' }}>
+          <select value={selCampaign?.id || ''} onChange={e => handleCampaignChange(e.target.value)}
+            style={{ padding: '11px 14px', borderRadius: '10px', background: '#111827', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', fontSize: '14px', outline: 'none', cursor: 'pointer', width: '100%', maxWidth: '400px' }}>
             <option value="">Choose campaign…</option>
             {campaigns.map(c => <option key={c.id} value={c.id} style={{ background: '#111827' }}>{c.title}</option>)}
           </select>
         </div>
       )}
 
+      {/* Milestone advance banner — only show when currentMilestone > 1 AND previous milestone was approved */}
+      {selCampaign && !isFirstMs && (
+        <div style={{ marginBottom: '16px', padding: '12px 16px', borderRadius: '12px', border: '1px solid rgba(16,185,129,0.35)', background: 'rgba(16,185,129,0.07)', fontSize: '13px', color: '#6ee7b7', lineHeight: 1.7 }}>
+          🎉 <strong>Congratulations!</strong> Milestone {currentMsIndex} was approved
+          {prevMsAmount > 0 && <> and <strong>₹{prevMsAmount.toLocaleString('en-IN')}</strong> has been released</>}.
+          {' '}Now upload proof for <strong>Milestone {selCampaign.currentMilestone}{currentMsTitle ? `: ${currentMsTitle}` : ''}</strong>.
+        </div>
+      )}
+
+      {/* Document hint */}
+      {selCampaign && (
+        <div style={{ marginBottom: '20px', padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(34,211,238,0.2)', background: 'rgba(34,211,238,0.05)', fontSize: '12px', color: '#67e8f9' }}>
+          📋 <strong>Milestone {selCampaign.currentMilestone} documents:</strong>{' '}
+          {getMilestoneDocHint(currentMsIndex)}
+        </div>
+      )}
+
+      {/* Existing proof status — persisted from Firestore, survives refresh */}
+      {currentMsAlreadySubmitted && (
+        <div style={{ marginBottom: '20px', padding: '12px 16px', borderRadius: '12px', border: '1px solid rgba(245,158,11,0.35)', background: 'rgba(245,158,11,0.07)', fontSize: '13px', color: '#fcd34d' }}>
+          {submittedProof.status === 'approved'
+            ? '✅ Proof for this milestone was auto-approved. Next milestone is now active.'
+            : submittedProof.status === 'rejected'
+            ? '❌ Proof was auto-rejected. Please resubmit with better documentation.'
+            : `⏳ Proof for Milestone ${submittedProof.milestoneNo} is under admin review (AI score: ${submittedProof.aiScore ?? '—'}%). You will be notified once reviewed.`}
+        </div>
+      )}
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
 
-        {/* Left — Milestones */}
+        {/* Left — ALL milestones shown always */}
         <div style={{ borderRadius: '18px', border: '1px solid rgba(255,255,255,0.08)', background: '#0d1021', padding: '24px' }}>
           <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>Campaign Milestones</h3>
           {selCampaign ? (
             <>
-              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginBottom: '20px', padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(124,58,237,0.06)' }}>
-                📋 {selCampaign.title} · ₹{(selCampaign.targetAmount || 0).toLocaleString('en-IN')} total
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginBottom: '16px', padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(124,58,237,0.06)' }}>
+                📋 {selCampaign.title}<br />
+                Goal: ₹{(selCampaign.targetAmount || 0).toLocaleString('en-IN')} · {safeMilestones.length} milestones
               </div>
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {(selCampaign.milestones || []).map((m, i) => (
-                  <div key={i} style={{ padding: '14px 16px', borderRadius: '12px', ...(MS_STYLE[m.status] || MS_STYLE.locked) }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: 600 }}>{m.title}</span>
-                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 9px', borderRadius: '999px', ...(PILL[m.status] || PILL.locked) }}>
-                        {m.status === 'verified' || m.status === 'approved' ? '✓ Verified'
-                          : m.status === 'pending' ? '⏳ Pending'
-                          : m.status === 'rejected' ? '✗ Rejected'
-                          : '🔒 Locked'}
-                      </span>
+                {safeMilestones.map((m, i) => {
+                  const msNo         = i + 1;
+                  const isCurrent    = msNo === selCampaign.currentMilestone;
+                  const isPast       = msNo < selCampaign.currentMilestone;
+                  const isFuture     = msNo > selCampaign.currentMilestone;
+                  const justSubmitted= currentMsAlreadySubmitted && submittedProof.milestoneNo === msNo;
+
+                  // Determine display status
+                  let displayStatus;
+                  if (justSubmitted) {
+                    displayStatus = submittedProof.status;
+                  } else if (m.status === 'verified' || m.status === 'approved') {
+                    displayStatus = 'verified';
+                  } else if (isPast) {
+                    // Past milestones that aren't marked verified — show as pending (shouldn't happen normally)
+                    displayStatus = 'pending_admin_review';
+                  } else if (isCurrent) {
+                    displayStatus = 'pending';  // current = ready to upload
+                  } else {
+                    displayStatus = 'locked';   // future milestones
+                  }
+
+                  // ── Amount: use stored amount, fallback to derived from target ──
+                  const amt = m.amount && m.amount > 0
+                    ? m.amount
+                    : (() => {
+                        const total = Number(selCampaign.targetAmount) || 0;
+                        const n     = safeMilestones.length;
+                        if (!total || !n) return 0;
+                        const per = Math.floor(total / n);
+                        return i === n - 1 ? total - per * (n - 1) : per;
+                      })();
+
+                  return (
+                    <div key={i} style={{ padding: '14px 16px', borderRadius: '12px', ...(MS_STYLE[displayStatus] || MS_STYLE.locked) }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 600 }}>
+                          {m.title || `Milestone ${msNo}`}
+                        </span>
+                        <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 9px', borderRadius: '999px', ...(PILL[displayStatus] || PILL.locked) }}>
+                          {getPillLabel(displayStatus)}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>₹{amt.toLocaleString('en-IN')}</span>
+                        {isCurrent && !currentMsAlreadySubmitted && (
+                          <span style={{ color: '#c4b5fd', fontSize: '11px' }}>← Upload proof here</span>
+                        )}
+                        {isFuture && (
+                          <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>🔒 Locked</span>
+                        )}
+                      </div>
                     </div>
-                    <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)' }}>
-                      ₹{(m.amount || 0).toLocaleString('en-IN')}
-                      {i + 1 === selCampaign.currentMilestone && (
-                        <span style={{ marginLeft: '8px', color: '#c4b5fd' }}>← Upload proof here</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           ) : (
@@ -339,12 +505,14 @@ Analyze the uploaded document image and return ONLY valid JSON (no markdown, no 
           <div style={{ borderRadius: '18px', border: '1px solid rgba(255,255,255,0.08)', background: '#0d1021', padding: '24px', marginBottom: '16px' }}>
             <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>Upload Documents</h3>
             <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', marginBottom: '20px' }}>
-              Milestone {selCampaign?.currentMilestone || '—'} — {selCampaign?.milestones?.[(selCampaign?.currentMilestone || 1) - 1]?.title || 'Select campaign'}
+              {selCampaign
+                ? `Milestone ${selCampaign.currentMilestone}${currentMsTitle ? ` — ${currentMsTitle}` : ''}`
+                : 'Select a campaign to begin'}
             </p>
 
             {/* Drop zone */}
             <div
-              onClick={() => fileRef.current.click()}
+              onClick={() => fileRef.current?.click()}
               onDragEnter={() => setDrag(true)}
               onDragLeave={() => setDrag(false)}
               onDragOver={e => e.preventDefault()}
@@ -377,7 +545,7 @@ Analyze the uploaded document image and return ONLY valid JSON (no markdown, no 
 
             {uploading && (
               <div style={{ marginBottom: '14px', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(124,58,237,0.3)', background: 'rgba(124,58,237,0.08)' }}>
-                <div style={{ fontSize: '12px', color: '#c4b5fd', marginBottom: '8px' }}>Uploading… {uploadPct}%</div>
+                <div style={{ fontSize: '12px', color: '#c4b5fd', marginBottom: '8px' }}>Uploading to Cloudinary… {uploadPct}%</div>
                 <div style={{ height: '5px', borderRadius: '5px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${uploadPct}%`, background: 'linear-gradient(90deg,#7c3aed,#0891b2)', transition: 'width 0.2s', borderRadius: '5px' }} />
                 </div>
@@ -385,14 +553,15 @@ Analyze the uploaded document image and return ONLY valid JSON (no markdown, no 
             )}
 
             {uploaded.length >= 1 && !result && (
-              <button onClick={runVerification} disabled={verifying || uploading || !selCampaign} style={{
-                width: '100%', padding: '14px', borderRadius: '12px', border: 'none',
-                background: 'linear-gradient(135deg,#7c3aed,#0891b2)',
-                color: '#fff', fontWeight: 700, fontSize: '14px',
-                cursor: verifying || uploading || !selCampaign ? 'not-allowed' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                opacity: verifying || uploading || !selCampaign ? 0.6 : 1,
-              }}>
+              <button onClick={runVerification} disabled={verifying || uploading || !selCampaign}
+                style={{
+                  width: '100%', padding: '14px', borderRadius: '12px', border: 'none',
+                  background: 'linear-gradient(135deg,#7c3aed,#0891b2)',
+                  color: '#fff', fontWeight: 700, fontSize: '14px',
+                  cursor: verifying || uploading || !selCampaign ? 'not-allowed' : 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                  opacity: verifying || uploading || !selCampaign ? 0.6 : 1,
+                }}>
                 {verifying
                   ? <><span style={{ width: '16px', height: '16px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />Analyzing with AI…</>
                   : uploading ? 'Uploading files…'
@@ -408,25 +577,19 @@ Analyze the uploaded document image and return ONLY valid JSON (no markdown, no 
                 <div style={{ fontSize: '13px', fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>🤖 AI Confidence Score</div>
                 <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '44px', fontWeight: 800, color: scoreColor }}>{result.score}%</div>
               </div>
-
               <div style={{ height: '6px', borderRadius: '6px', overflow: 'hidden', background: 'rgba(255,255,255,0.08)', marginBottom: '16px' }}>
                 <div style={{ height: '100%', width: `${result.score}%`, borderRadius: '6px', background: scoreColor, transition: 'width 1s ease' }} />
               </div>
-
-              {/* Verdict banner */}
               <div style={{
-                padding: '12px 16px', borderRadius: '12px', marginBottom: '20px',
-                fontSize: '13px', fontWeight: 700,
+                padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', fontSize: '13px', fontWeight: 700,
                 ...(s > 85
                   ? { border: '1px solid rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.08)', color: '#6ee7b7' }
                   : s >= 55
                   ? { border: '1px solid rgba(245,158,11,0.4)', background: 'rgba(245,158,11,0.08)', color: '#fcd34d' }
                   : { border: '1px solid rgba(239,68,68,0.4)',  background: 'rgba(239,68,68,0.08)',  color: '#fca5a5' }),
               }}>
-                {s > 85
-                  ? '✅ AUTO-APPROVED — Milestone funds released automatically'
-                  : s >= 55
-                  ? '🗳️ ADMIN REVIEW REQUIRED — Admin will approve or reject'
+                {s > 85  ? '✅ AUTO-APPROVED — Milestone funds released automatically'
+                  : s >= 55 ? '🗳️ ADMIN REVIEW REQUIRED — Admin will approve or reject'
                   : '❌ AUTO-REJECTED — Score too low, funds not released'}
                 <div style={{ fontSize: '12px', fontWeight: 400, marginTop: '4px', opacity: 0.8 }}>{result.summary}</div>
               </div>
@@ -446,9 +609,9 @@ Analyze the uploaded document image and return ONLY valid JSON (no markdown, no 
 
               <div style={{ padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(34,211,238,0.2)', background: 'rgba(34,211,238,0.05)', fontSize: '12px', color: '#67e8f9' }}>
                 📋 Proof saved to admin panel.
-                {s > 85 && ' Milestone marked as verified — next milestone is now active.'}
+                {s > 85  && ' Milestone marked verified — next milestone is now active.'}
                 {s >= 55 && s <= 85 && ' Admin will review and release funds if approved.'}
-                {s < 55 && ' Proof rejected — please review and resubmit with better documentation.'}
+                {s < 55  && ' Proof rejected — resubmit with better documentation.'}
               </div>
             </div>
           )}
