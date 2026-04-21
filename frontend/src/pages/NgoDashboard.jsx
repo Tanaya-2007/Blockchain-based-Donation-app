@@ -23,7 +23,8 @@ const REQUIRED_DOCS = [
   { key: 'regCertificate', label: 'Registration / Incorporation Certificate', required: true,  hint: 'Society registration, Trust deed, or Section 8 company certificate' },
   { key: 'panCard',        label: 'PAN Card of Organisation',                 required: true,  hint: "PAN card issued in the organisation's name (not personal)" },
   { key: 'authLetter',     label: 'Authorisation Letter',                     required: true,  hint: 'Letter from chairman/board authorising this person to represent the org' },
-  { key: 'cert80G',        label: '80G / 12A Tax Exemption Certificate',      required: false, hint: 'Required for donors to claim income-tax deduction on their donations' },
+  // ── FIX: cert80G is now required ──
+  { key: 'cert80G',        label: '80G / 12A Tax Exemption Certificate',      required: true,  hint: 'Required for donors to claim income-tax deduction on their donations' },
   { key: 'auditReport',    label: 'Latest Audited Financial Report',           required: false, hint: 'Annual audit report for the most recent financial year' },
 ];
 
@@ -69,15 +70,13 @@ async function compressImage(file) {
   });
 }
 
-/* ─── Cloudinary upload — NO eager param (unsigned preset restriction) ── */
+/* ─── Cloudinary upload — NO eager param ── */
 function uploadToCloudinary(file, onProgress) {
   return new Promise((resolve, reject) => {
     const fd = new FormData();
     fd.append('file', file);
     fd.append('upload_preset', UPLOAD_PRESET);
     fd.append('folder', 'ngoRequests');
-    // ⚠️ DO NOT add 'eager' — unsigned presets don't allow it
-
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`);
     xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100)); };
@@ -179,17 +178,41 @@ export default function NgoDashboard() {
   useEffect(() => {
     if (!user) return;
     if (role === 'admin') { navigate('/admin', { replace: true }); return; }
+
     if (role === 'ngo') {
-      setStatus('approved');
-      const key = `ngo_approved_seen_${user.uid}`;
-      if (!localStorage.getItem(key)) { setShowPopup(true); localStorage.setItem(key, '1'); }
-      getDocs(query(collection(db, 'campaigns'), where('ngoId', '==', user.uid))).then(snap => {
-        const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setCampaigns(list);
-        setTotalRaised(list.reduce((sum, c) => sum + (c.raisedAmount || 0), 0));
-      });
+      // ── FIX: verify an approved ngoRequest exists before showing the NGO dashboard ──
+      // A brand-new org user gets role='ngo' from the hint in AuthProvider,
+      // but they haven't submitted a registration yet — they must fill the form first.
+      (async () => {
+        const snap = await getDocs(
+          query(collection(db, 'ngoRequests'), where('uid', '==', user.uid), limit(5))
+        );
+        const hasApproved = snap.docs.some(d => d.data()?.status === 'approved');
+
+        if (hasApproved) {
+          // Legitimate approved NGO — show dashboard
+          setStatus('approved');
+          const key = `ngo_approved_seen_${user.uid}`;
+          if (!localStorage.getItem(key)) { setShowPopup(true); localStorage.setItem(key, '1'); }
+          getDocs(query(collection(db, 'campaigns'), where('ngoId', '==', user.uid))).then(campSnap => {
+            const list = campSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            setCampaigns(list);
+            setTotalRaised(list.reduce((sum, c) => sum + (c.raisedAmount || 0), 0));
+          });
+        } else if (snap.empty) {
+          // Brand new org user — no request submitted yet, show registration form
+          setStatus('none');
+        } else {
+          // Has a request but not approved yet
+          const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          items.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+          setStatus(items[0].status || 'pending');
+        }
+      })();
       return;
     }
+
+    // role === 'donor' — check if they have a pending/rejected request
     (async () => {
       const snap = await getDocs(query(collection(db, 'ngoRequests'), where('uid', '==', user.uid), limit(5)));
       if (snap.empty) { setStatus('none'); return; }
@@ -217,8 +240,6 @@ export default function NgoDashboard() {
     try {
       const urls = {};
       let done = 0;
-
-      // Sequential upload — clear progress per file
       for (const docDef of filesToUpload) {
         setUploadLabel(docDef.label);
         setUploadPct(0);
@@ -417,16 +438,12 @@ export default function NgoDashboard() {
             <div style={{ marginBottom: '20px', padding: '16px 18px', borderRadius: '14px', border: '1px solid rgba(124,58,237,0.3)', background: 'rgba(124,58,237,0.08)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 600, color: '#c4b5fd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{uploadLabel}</div>
-                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', flexShrink: 0, marginLeft: '8px' }}>
-                  File {doneFiles + 1} of {totalFiles}
-                </div>
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', flexShrink: 0, marginLeft: '8px' }}>File {doneFiles + 1} of {totalFiles}</div>
               </div>
               <div style={{ height: '6px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
                 <div style={{ height: '100%', borderRadius: '6px', background: 'linear-gradient(90deg,#7c3aed,#0891b2)', width: `${Math.round((doneFiles / totalFiles) * 100 + (uploadPct / totalFiles))}%`, transition: 'width 0.2s ease' }} />
               </div>
-              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginTop: '6px' }}>
-                Uploading "{uploadLabel}" — {uploadPct}%
-              </div>
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginTop: '6px' }}>Uploading "{uploadLabel}" — {uploadPct}%</div>
             </div>
           )}
 
