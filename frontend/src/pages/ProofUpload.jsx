@@ -21,6 +21,7 @@ function safeCampaign(raw) {
   const c = { ...raw, milestones: normalizeMilestones(raw.milestones) };
   const total = Number(c.targetAmount) || 0;
   const n     = c.milestones.length;
+  // Fix old campaigns where amounts were saved as 0
   if (n > 0 && total > 0 && c.milestones.every(m => !m.amount || m.amount === 0)) {
     const per = Math.floor(total / n);
     c.milestones = c.milestones.map((m, i) => ({
@@ -28,6 +29,29 @@ function safeCampaign(raw) {
     }));
   }
   return c;
+}
+
+/* ─── FIX: dynamic milestone hint from actual milestone title ─────────────
+   Instead of hardcoded medical hints, we show the milestone's actual title
+   from the campaign + a generic "upload relevant proof" instruction.
+   Falls back to a generic hint if title is default "Milestone N".           */
+function getMilestoneHint(milestone, msIndex) {
+  const title = milestone?.title || '';
+  const isDefault = /^Milestone\s+\d+$/i.test(title.trim());
+
+  if (!isDefault && title.trim()) {
+    return `Upload proof documents for: "${title}" — receipts, certificates, reports, or official letters that confirm this milestone was completed.`;
+  }
+
+  // Generic fallback hints for each position
+  const fallbacks = [
+    'Upload: Invoice / Admission letter / Initial report confirming the milestone was started',
+    'Upload: Progress report / Certificate / Receipt confirming milestone completion',
+    'Upload: Final report / Bank statement / Official confirmation of funds utilisation',
+    'Upload: Outcome report / Beneficiary testimonial / Verification letter',
+    'Upload: Closure document / Final audit / Summary report from authorised person',
+  ];
+  return fallbacks[msIndex] || fallbacks[fallbacks.length - 1];
 }
 
 /* ─── upload to Cloudinary — NO eager param ──────────── */
@@ -96,8 +120,9 @@ export default function ProofUpload({ onToast }) {
   const [selCampaign,  setSelCampaign]  = useState(null);
   const [loadingCamps, setLoadingCamps] = useState(true);
 
-  /* submittedProofs keyed by `campaignId_milestoneNo` so each milestone
-     is tracked independently — prevents duplicate submission per milestone */
+  /* submittedProofs keyed by `campaignId_milestoneNo` (String) so each
+     milestone is tracked independently and survives page refresh.
+     Populated from Firestore on mount.                                  */
   const [submittedProofs, setSubmittedProofs] = useState({});
 
   const [uploaded,  setUploaded]  = useState([]);
@@ -111,7 +136,7 @@ export default function ProofUpload({ onToast }) {
   const [imgBase64, setImgBase64] = useState(null);
   const [imgType,   setImgType]   = useState(null);
 
-  /* ── Load campaigns + existing proofs ── */
+  /* ── Load campaigns + existing proofs from Firestore ── */
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -124,7 +149,10 @@ export default function ProofUpload({ onToast }) {
         setCampaigns(list);
         if (list.length === 1) setSelCampaign(list[0]);
 
-        // Load proofs keyed by campaignId_milestoneNo to track per-milestone
+        /* ── KEY FIX: load proof status from Firestore, not just React state.
+           Cast milestoneNo to String consistently so key lookup always works.
+           Previously milestoneNo could be Number from Firestore but key was
+           built with String interpolation — comparison failed silently.      */
         const proofSnap = await getDocs(
           query(collection(db, 'proofs'), where('ngoId', '==', user.uid))
         );
@@ -134,11 +162,15 @@ export default function ProofUpload({ onToast }) {
 
         const proofMap = {};
         allProofs.forEach(p => {
-          if (!p.campaignId || !p.milestoneNo) return;
-          // Key = campaignId_milestoneNo — tracks EACH milestone separately
-          const key = `${p.campaignId}_${p.milestoneNo}`;
+          if (!p.campaignId || p.milestoneNo == null) return;
+          // Always use String for both parts of the key to avoid type mismatches
+          const key = `${String(p.campaignId)}_${String(p.milestoneNo)}`;
           if (!proofMap[key]) {
-            proofMap[key] = { milestoneNo: p.milestoneNo, status: p.status, aiScore: p.aiScore };
+            proofMap[key] = {
+              milestoneNo: Number(p.milestoneNo),
+              status:      p.status,
+              aiScore:     p.aiScore,
+            };
           }
         });
         setSubmittedProofs(proofMap);
@@ -201,8 +233,8 @@ export default function ProofUpload({ onToast }) {
       setCampaigns(prev => prev.map(c => c.id === selCampaign.id ? updateCamp(c) : c));
     }
 
-    // Track this specific milestone as submitted
-    const key = `${selCampaign.id}_${currentMs}`;
+    // Use String key consistently — same format as the load-from-Firestore code above
+    const key = `${String(selCampaign.id)}_${String(currentMs)}`;
     setSubmittedProofs(prev => ({ ...prev, [key]: { milestoneNo: currentMs, status, aiScore: aiResult?.score } }));
   };
 
@@ -279,22 +311,22 @@ Return ONLY valid JSON (no markdown):
   };
 
   /* ── Derived values ── */
-  const safeMilestones    = normalizeMilestones(selCampaign?.milestones);
-  const totalMilestones   = safeMilestones.length;
-  const currentMsNo       = selCampaign?.currentMilestone || 1;
-  const currentMsIndex    = currentMsNo - 1;
-  const currentMsTitle    = safeMilestones[currentMsIndex]?.title || '';
-  const allMilestonesComplete = currentMsNo > totalMilestones && totalMilestones > 0;
+  const safeMilestones         = normalizeMilestones(selCampaign?.milestones);
+  const totalMilestones        = safeMilestones.length;
+  const currentMsNo            = selCampaign?.currentMilestone || 1;
+  const currentMsIndex         = currentMsNo - 1;
+  const currentMsObj           = safeMilestones[currentMsIndex];
+  const currentMsTitle         = currentMsObj?.title || '';
+  const allMilestonesComplete  = currentMsNo > totalMilestones && totalMilestones > 0;
 
-  // Key includes milestoneNo so each milestone is tracked independently
-  const currentProofKey        = selCampaign ? `${selCampaign.id}_${currentMsNo}` : null;
-  const currentMsAlreadySubmitted = currentProofKey ? !!submittedProofs[currentProofKey] : false;
-  const currentProofData       = currentProofKey ? submittedProofs[currentProofKey] : null;
+  // String key — consistent with load + save
+  const currentProofKey            = selCampaign ? `${String(selCampaign.id)}_${String(currentMsNo)}` : null;
+  const currentMsAlreadySubmitted  = currentProofKey ? !!submittedProofs[currentProofKey] : false;
+  const currentProofData           = currentProofKey ? submittedProofs[currentProofKey] : null;
 
   const s          = result?.score ?? 0;
   const scoreColor = s > 85 ? '#34d399' : s >= 55 ? '#fbbf24' : '#f87171';
 
-  /* ── No campaigns ── */
   if (!loadingCamps && campaigns.length === 0) {
     return (
       <div style={{ minHeight:'calc(100vh - 68px)', display:'flex', alignItems:'center', justifyContent:'center', padding:'40px 16px' }}>
@@ -341,7 +373,7 @@ Return ONLY valid JSON (no markdown):
         </div>
       )}
 
-      {/* ── ALL MILESTONES COMPLETE ── */}
+      {/* All milestones complete */}
       {selCampaign && allMilestonesComplete && (
         <div style={{ padding:'40px 32px', borderRadius:'20px', border:'1px solid rgba(16,185,129,0.4)', background:'rgba(16,185,129,0.07)', textAlign:'center', marginBottom:'24px' }}>
           <div style={{ fontSize:'52px', marginBottom:'16px' }}>🎉</div>
@@ -350,24 +382,19 @@ Return ONLY valid JSON (no markdown):
           </h3>
           <p style={{ color:'rgba(255,255,255,0.45)', fontSize:'14px', lineHeight:1.7 }}>
             Every milestone proof has been submitted for <strong>{selCampaign.title}</strong>.
-            No further uploads are required for this campaign.
           </p>
         </div>
       )}
 
-      {/* ── ALREADY SUBMITTED for current milestone ── */}
+      {/* Already submitted for current milestone */}
       {selCampaign && !allMilestonesComplete && currentMsAlreadySubmitted && (
         <div style={{
           padding:'20px 24px', borderRadius:'16px', marginBottom:'20px',
-          border: currentProofData?.status === 'approved'
-            ? '1px solid rgba(16,185,129,0.4)'
-            : currentProofData?.status === 'rejected'
-            ? '1px solid rgba(239,68,68,0.4)'
+          border: currentProofData?.status === 'approved' ? '1px solid rgba(16,185,129,0.4)'
+            : currentProofData?.status === 'rejected' ? '1px solid rgba(239,68,68,0.4)'
             : '1px solid rgba(245,158,11,0.4)',
-          background: currentProofData?.status === 'approved'
-            ? 'rgba(16,185,129,0.07)'
-            : currentProofData?.status === 'rejected'
-            ? 'rgba(239,68,68,0.07)'
+          background: currentProofData?.status === 'approved' ? 'rgba(16,185,129,0.07)'
+            : currentProofData?.status === 'rejected' ? 'rgba(239,68,68,0.07)'
             : 'rgba(245,158,11,0.07)',
         }}>
           <div style={{ fontSize:'14px', fontWeight:700, marginBottom:'6px',
@@ -387,6 +414,14 @@ Return ONLY valid JSON (no markdown):
         </div>
       )}
 
+      {/* ── FIX: dynamic milestone document hint ── */}
+      {selCampaign && !allMilestonesComplete && !currentMsAlreadySubmitted && currentMsObj && (
+        <div style={{ marginBottom:'20px', padding:'10px 14px', borderRadius:'10px', border:'1px solid rgba(34,211,238,0.2)', background:'rgba(34,211,238,0.05)', fontSize:'12px', color:'#67e8f9' }}>
+          📋 <strong>Milestone {currentMsNo}{currentMsTitle ? ` — ${currentMsTitle}` : ''} documents:</strong>{' '}
+          {getMilestoneHint(currentMsObj, currentMsIndex)}
+        </div>
+      )}
+
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:'24px' }}>
 
         {/* Left — Milestones */}
@@ -399,11 +434,11 @@ Return ONLY valid JSON (no markdown):
                 Goal: ₹{(selCampaign.targetAmount || 0).toLocaleString('en-IN')} · {totalMilestones} milestone{totalMilestones !== 1 ? 's' : ''}
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                {/* Only render milestones that actually exist in the campaign */}
                 {safeMilestones.map((m, i) => {
                   const msNo      = i + 1;
                   const isCurrent = msNo === currentMsNo && !allMilestonesComplete;
-                  const proofKey  = `${selCampaign.id}_${msNo}`;
+                  // String key — same format everywhere
+                  const proofKey  = `${String(selCampaign.id)}_${String(msNo)}`;
                   const proof     = submittedProofs[proofKey];
 
                   let displayStatus;
@@ -456,14 +491,13 @@ Return ONLY valid JSON (no markdown):
 
         {/* Right — Upload + AI */}
         <div>
-          {/* Only show upload panel if: campaign selected, milestones not all done, current milestone not already submitted */}
           {(!selCampaign || allMilestonesComplete || currentMsAlreadySubmitted) ? (
             <div style={{ borderRadius:'18px', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021', padding:'32px', textAlign:'center' }}>
               <div style={{ fontSize:'40px', marginBottom:'12px' }}>
                 {allMilestonesComplete ? '✅' : currentMsAlreadySubmitted ? '⏳' : '📋'}
               </div>
               <div style={{ fontSize:'14px', fontWeight:600, color:'rgba(255,255,255,0.5)' }}>
-                {!selCampaign           ? 'Select a campaign to begin'
+                {!selCampaign ? 'Select a campaign to begin'
                  : allMilestonesComplete ? 'All milestones completed — no uploads needed'
                  : 'Proof already submitted for this milestone'}
               </div>
@@ -477,7 +511,6 @@ Return ONLY valid JSON (no markdown):
                   {currentMsTitle ? ` — ${currentMsTitle}` : ''}
                 </p>
 
-                {/* Drop zone */}
                 <div
                   onClick={() => fileRef.current?.click()}
                   onDragEnter={() => setDrag(true)}
@@ -488,8 +521,7 @@ Return ONLY valid JSON (no markdown):
                     border:`2px dashed ${drag ? 'rgba(124,58,237,0.7)' : 'rgba(255,255,255,0.1)'}`,
                     borderRadius:'14px', padding:'48px 24px', textAlign:'center',
                     cursor:'pointer', marginBottom:'14px',
-                    background: drag ? 'rgba(124,58,237,0.06)' : 'transparent',
-                    transition:'all 0.2s',
+                    background: drag ? 'rgba(124,58,237,0.06)' : 'transparent', transition:'all 0.2s',
                   }}>
                   <input ref={fileRef} type="file" accept="image/*,.pdf" multiple style={{ display:'none' }}
                     onChange={e => Array.from(e.target.files).forEach(handleFile)} />
@@ -537,7 +569,6 @@ Return ONLY valid JSON (no markdown):
                 )}
               </div>
 
-              {/* AI Result */}
               {result && (
                 <div style={{ borderRadius:'18px', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021', padding:'24px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
