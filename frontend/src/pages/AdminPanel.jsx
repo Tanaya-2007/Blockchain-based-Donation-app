@@ -22,6 +22,19 @@ const RISK_STYLE = {
   HIGH:   { bg:'rgba(239,68,68,0.15)',  color:'#fca5a5', border:'rgba(239,68,68,0.4)',  icon:'🔴' },
 };
 
+// Document classification labels for display
+const DOC_CLASS_LABEL = {
+  correct_document: { label: '✅ Valid Registration Certificate', color: '#6ee7b7' },
+  wrong_document:   { label: '⚠️ Wrong Document Type',           color: '#fcd34d' },
+  unrelated_image:  { label: '❌ Unrelated Image',               color: '#fca5a5' },
+  code_image:       { label: '❌ Code Screenshot',               color: '#fca5a5' },
+  screenshot:       { label: '❌ UI/Web Screenshot',             color: '#fca5a5' },
+  blank:            { label: '❌ Blank / Unreadable',            color: '#fca5a5' },
+  no_image:         { label: '❌ No Image Provided (PDF)',       color: '#fca5a5' },
+  api_error:        { label: '⚠️ AI Service Error',             color: '#fcd34d' },
+  unknown:          { label: '— Unknown',                        color: 'rgba(255,255,255,0.4)' },
+};
+
 /* ─── reusable components ─────────────────────────────── */
 function InfoPopup({ type, title, message, onClose }) {
   const S = {
@@ -75,12 +88,17 @@ function VerificationBreakdown({ aiVerification, regNumber, orgName }) {
     </div>
   );
 
-  const { formatChecks, formatScore, aiExtracted, aiScore, nameMatch, regMatch, redFlags, aiSummary, riskScore, riskLevel, scoreBreakdown } = aiVerification;
-  const rs = RISK_STYLE[riskLevel] || RISK_STYLE.MEDIUM;
+  const {
+    formatChecks, formatScore, aiExtracted,
+    aiScore, documentClassification, aiDecision,
+    matchedFields, extractedTextSummary, reasoning,
+    nameMatch, regMatch, redFlags, red_flags,
+    aiSummary, riskScore, riskLevel, scoreBreakdown,
+  } = aiVerification;
 
-  // Build NGO Darpan search URL
-  const darpanUrl = `https://ngodarpan.gov.in/index.php/search/show_ngo_detail/${encodeURIComponent(orgName || '')}`;
-  const mcaUrl    = `https://www.mca.gov.in/mcafoportal/viewCompanyMasterData.do`;
+  const rs        = RISK_STYLE[riskLevel] || RISK_STYLE.HIGH;
+  const allFlags  = redFlags || red_flags || [];
+  const classInfo = DOC_CLASS_LABEL[documentClassification || 'unknown'] || DOC_CLASS_LABEL.unknown;
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
@@ -95,64 +113,96 @@ function VerificationBreakdown({ aiVerification, regNumber, orgName }) {
             {riskScore}<span style={{ fontSize:'16px', fontWeight:400 }}>/100</span>
           </div>
           <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.4)', marginTop:'4px' }}>
-            {riskScore >= 80 ? 'Safe to approve — all checks passed'
-              : riskScore >= 55 ? 'Proceed with caution — review documents carefully'
-              : 'High risk — additional verification strongly recommended'}
+            {riskScore >= 65
+              ? 'Passed AI threshold — admin review required before approval'
+              : 'Failed AI threshold — auto-rejected, admin can override if needed'}
           </div>
         </div>
-        {/* Score breakdown */}
         {scoreBreakdown && (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px 16px', fontSize:'12px' }}>
-            {[
-              { label:'Format checks', val: scoreBreakdown.formatPoints, max:30 },
-              { label:'AI authenticity', val: scoreBreakdown.aiAuth, max:40 },
-              { label:'Name match',    val: scoreBreakdown.namePoints, max:20 },
-              { label:'Reg match',     val: scoreBreakdown.regPoints,  max:10 },
-            ].map(s => (
-              <div key={s.label} style={{ color:'rgba(255,255,255,0.5)' }}>
-                <span style={{ color: s.val >= (s.max * 0.6) ? '#6ee7b7' : '#fcd34d' }}>{s.val}</span>/{s.max} {s.label}
-              </div>
-            ))}
+          <div style={{ display:'flex', flexDirection:'column', gap:'5px', fontSize:'12px' }}>
+            <div style={{ color:'rgba(255,255,255,0.5)' }}>
+              AI confidence: <span style={{ color: (scoreBreakdown.aiConfidence || 0) >= 65 ? '#6ee7b7' : '#fca5a5', fontWeight:700 }}>{scoreBreakdown.aiConfidence ?? aiScore ?? 0}</span>/100
+            </div>
+            <div style={{ color:'rgba(255,255,255,0.5)' }}>
+              Format bonus: <span style={{ color:'#a78bfa', fontWeight:700 }}>+{scoreBreakdown.formatBonus || 0}</span>
+            </div>
+            <div style={{ color:'rgba(255,255,255,0.5)' }}>
+              AI decision: <span style={{ color: aiDecision === 'manual_review' ? '#6ee7b7' : '#fca5a5', fontWeight:700 }}>{aiDecision || '—'}</span>
+            </div>
           </div>
         )}
       </div>
 
-      {/* AI extracted data vs declared */}
-      {aiExtracted && (
+      {/* Document classification — most important single signal */}
+      <div style={{ padding:'14px 16px', borderRadius:'12px', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.04)' }}>
+        <div style={{ fontSize:'11px', fontWeight:700, color:'rgba(255,255,255,0.4)', letterSpacing:'1px', textTransform:'uppercase', marginBottom:'10px' }}>
+          🔍 Document Classification
+        </div>
+        <div style={{ fontSize:'15px', fontWeight:700, color: classInfo.color, marginBottom:'8px' }}>
+          {classInfo.label}
+        </div>
+        {(reasoning || aiSummary) && (
+          <div style={{ fontSize:'13px', color:'rgba(255,255,255,0.55)', lineHeight:1.65, padding:'10px 12px', borderRadius:'8px', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)' }}>
+            {reasoning || aiSummary}
+          </div>
+        )}
+        {extractedTextSummary && (
+          <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.4)', marginTop:'8px', lineHeight:1.6 }}>
+            <strong style={{ color:'rgba(255,255,255,0.55)' }}>Extracted text:</strong> {extractedTextSummary}
+          </div>
+        )}
+      </div>
+
+      {/* Field match results */}
+      {(matchedFields && Object.keys(matchedFields).length > 0) && (
         <div style={{ borderRadius:'12px', border:'1px solid rgba(124,58,237,0.25)', background:'rgba(124,58,237,0.06)', padding:'16px' }}>
           <div style={{ fontSize:'11px', fontWeight:700, color:'#c4b5fd', letterSpacing:'1px', textTransform:'uppercase', marginBottom:'12px' }}>
-            🤖 AI Document Extraction
+            🔗 Field Match Results
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:'10px' }}>
+            {Object.entries(matchedFields).map(([key, val]) => (
+              <div key={key} style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'13px' }}>
+                <span style={{ fontWeight:700, color: val === true ? '#34d399' : val === false ? '#f87171' : 'rgba(255,255,255,0.3)', flexShrink:0 }}>
+                  {val === true ? '✓' : val === false ? '✗' : '—'}
+                </span>
+                <span style={{ color: val === true ? '#6ee7b7' : val === false ? '#fca5a5' : 'rgba(255,255,255,0.4)' }}>
+                  {key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* AI extracted data */}
+      {aiExtracted && (
+        <div style={{ borderRadius:'12px', border:'1px solid rgba(124,58,237,0.2)', background:'rgba(124,58,237,0.04)', padding:'16px' }}>
+          <div style={{ fontSize:'11px', fontWeight:700, color:'#c4b5fd', letterSpacing:'1px', textTransform:'uppercase', marginBottom:'12px' }}>
+            🤖 AI Extracted Data vs Declared
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(200px,1fr))', gap:'12px', marginBottom:'10px' }}>
             {[
-              { label:'Extracted org name',  val: aiExtracted.orgName,      match: nameMatch },
-              { label:'Extracted reg number',val: aiExtracted.regNumber,    match: regMatch  },
-              { label:'Issuing authority',   val: aiExtracted.authority,    match: null      },
-              { label:'Registration date',   val: aiExtracted.registeredOn, match: null      },
-              { label:'Document type',       val: aiExtracted.documentType, match: null      },
+              { label:'Extracted org name',  val: aiExtracted.orgName,      match: nameMatch ?? matchedFields?.organization_name },
+              { label:'Extracted reg number',val: aiExtracted.regNumber,    match: regMatch  ?? matchedFields?.registration_number },
+              { label:'Issuing authority',   val: aiExtracted.authority,    match: null },
+              { label:'Registration date',   val: aiExtracted.registeredOn, match: null },
+              { label:'Document type',       val: aiExtracted.documentType, match: null },
             ].filter(f => f.val).map(f => (
               <div key={f.label}>
                 <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.3)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'3px' }}>{f.label}</div>
                 <div style={{ fontSize:'13px', color: f.match === true ? '#6ee7b7' : f.match === false ? '#fca5a5' : 'rgba(255,255,255,0.75)', display:'flex', alignItems:'center', gap:'4px' }}>
-                  {f.match === true ? '✓ ' : f.match === false ? '✗ ' : ''}
-                  {f.val}
+                  {f.match === true ? '✓ ' : f.match === false ? '✗ ' : ''}{f.val}
                 </div>
               </div>
             ))}
           </div>
-          {aiSummary && (
-            <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.45)', lineHeight:1.6, padding:'8px 12px', borderRadius:'8px', background:'rgba(255,255,255,0.03)', borderTop:'1px solid rgba(255,255,255,0.06)', marginTop:'10px' }}>
-              {aiSummary}
-            </div>
-          )}
-          {/* AI authenticity score */}
           {typeof aiScore === 'number' && (
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginTop:'10px' }}>
-              <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.4)' }}>Document authenticity:</div>
+              <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.4)', flexShrink:0 }}>AI confidence:</div>
               <div style={{ height:'6px', borderRadius:'6px', flex:1, background:'rgba(255,255,255,0.08)', overflow:'hidden' }}>
-                <div style={{ height:'100%', width:`${aiScore}%`, borderRadius:'6px', background: aiScore > 75 ? '#10b981' : aiScore > 50 ? '#f59e0b' : '#ef4444' }} />
+                <div style={{ height:'100%', width:`${aiScore}%`, borderRadius:'6px', background: aiScore >= 65 ? '#10b981' : aiScore >= 40 ? '#f59e0b' : '#ef4444' }} />
               </div>
-              <div style={{ fontSize:'13px', fontWeight:700, color: aiScore > 75 ? '#6ee7b7' : aiScore > 50 ? '#fcd34d' : '#fca5a5', flexShrink:0 }}>{aiScore}%</div>
+              <div style={{ fontSize:'13px', fontWeight:700, color: aiScore >= 65 ? '#6ee7b7' : aiScore >= 40 ? '#fcd34d' : '#fca5a5', flexShrink:0 }}>{aiScore}%</div>
             </div>
           )}
         </div>
@@ -177,44 +227,48 @@ function VerificationBreakdown({ aiVerification, regNumber, orgName }) {
       )}
 
       {/* Red flags */}
-      {redFlags?.length > 0 && (
+      {allFlags.length > 0 && (
         <div style={{ borderRadius:'12px', border:'1px solid rgba(239,68,68,0.3)', background:'rgba(239,68,68,0.06)', padding:'16px' }}>
           <div style={{ fontSize:'11px', fontWeight:700, color:'#fca5a5', letterSpacing:'1px', textTransform:'uppercase', marginBottom:'10px' }}>
-            ⚠ Red Flags ({redFlags.length})
+            ⚠ Red Flags ({allFlags.length})
           </div>
-          {redFlags.map((f, i) => (
-            <div key={i} style={{ display:'flex', gap:'8px', fontSize:'13px', color:'#fca5a5', marginBottom: i < redFlags.length-1 ? '6px' : 0 }}>
+          {allFlags.map((f, i) => (
+            <div key={i} style={{ display:'flex', gap:'8px', fontSize:'13px', color:'#fca5a5', marginBottom: i < allFlags.length-1 ? '6px' : 0 }}>
               <span style={{ flexShrink:0 }}>•</span>{f}
             </div>
           ))}
         </div>
       )}
 
-      {/* Registry verification links */}
+      {/* Registry verification links — FIXED URLs */}
       <div style={{ borderRadius:'12px', border:'1px solid rgba(34,211,238,0.2)', background:'rgba(34,211,238,0.04)', padding:'16px' }}>
         <div style={{ fontSize:'11px', fontWeight:700, color:'#67e8f9', letterSpacing:'1px', textTransform:'uppercase', marginBottom:'10px' }}>
-          🌐 Registry Verification (Manual Check)
+          🌐 Manual Registry Verification
         </div>
         <p style={{ fontSize:'12px', color:'rgba(255,255,255,0.4)', lineHeight:1.6, marginBottom:'12px' }}>
-          Click to verify this organisation on government registries. These links open the registry portal pre-filtered — confirm the registration number and organisation name match.
+          Open the government portal and search for the registration number below to cross-verify manually.
         </p>
         <div style={{ display:'flex', flexWrap:'wrap', gap:'10px' }}>
-          <a href={`https://ngodarpan.gov.in/index.php/search/`} target="_blank" rel="noopener noreferrer"
+          {/* NGO Darpan — correct search URL */}
+          <a href="https://ngodarpan.gov.in/index.php/search/" target="_blank" rel="noopener noreferrer"
             style={{ display:'inline-flex', alignItems:'center', gap:'7px', padding:'9px 16px', borderRadius:'8px', textDecoration:'none', border:'1px solid rgba(34,211,238,0.4)', background:'rgba(34,211,238,0.1)', color:'#67e8f9', fontSize:'12px', fontWeight:700 }}>
-            🏛️ NGO Darpan (NGOs) ↗
+            🏛️ NGO Darpan ↗
           </a>
-          <a href="https://www.mca.gov.in/mcafoportal/viewCompanyMasterData.do" target="_blank" rel="noopener noreferrer"
+          {/* MCA — correct company search URL */}
+          <a href="https://www.mca.gov.in/content/mca/global/en/mca/master-data/MDS.html" target="_blank" rel="noopener noreferrer"
             style={{ display:'inline-flex', alignItems:'center', gap:'7px', padding:'9px 16px', borderRadius:'8px', textDecoration:'none', border:'1px solid rgba(124,58,237,0.4)', background:'rgba(124,58,237,0.1)', color:'#c4b5fd', fontSize:'12px', fontWeight:700 }}>
-            🏢 MCA (Section 8 Companies) ↗
+            🏢 MCA Company Search ↗
           </a>
-          <a href="https://incometaxindia.gov.in/Pages/tools/80G-and-12A.aspx" target="_blank" rel="noopener noreferrer"
+          {/* Income Tax — correct 80G/12A search page */}
+          <a href="https://efiling.incometax.gov.in/eFiling/Services/KnowYourTanLink.html" target="_blank" rel="noopener noreferrer"
             style={{ display:'inline-flex', alignItems:'center', gap:'7px', padding:'9px 16px', borderRadius:'8px', textDecoration:'none', border:'1px solid rgba(245,158,11,0.4)', background:'rgba(245,158,11,0.1)', color:'#fcd34d', fontSize:'12px', fontWeight:700 }}>
-            📄 80G/12A Verify (Income Tax) ↗
+            📄 Income Tax e-Filing ↗
           </a>
         </div>
         {regNumber && (
           <div style={{ marginTop:'10px', fontSize:'11px', color:'rgba(255,255,255,0.3)' }}>
-            Search for registration number: <strong style={{ color:'rgba(255,255,255,0.6)' }}>{regNumber}</strong>
+            Search for: <strong style={{ color:'rgba(255,255,255,0.6)', userSelect:'all' }}>{regNumber}</strong>
+            {orgName && <> &nbsp;|&nbsp; <strong style={{ color:'rgba(255,255,255,0.6)', userSelect:'all' }}>{orgName}</strong></>}
           </div>
         )}
       </div>
@@ -271,7 +325,6 @@ function ProofsTab() {
   return (
     <div>
       {popup && <InfoPopup {...popup} onClose={() => setPopup(null)} />}
-
       <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'12px', marginBottom:'24px' }}>
         {[{ label:'Total', val:proofs.length, color:'#a78bfa' }, { label:'Pending', val:pending, color:'#fcd34d' }, { label:'Approved', val:proofs.filter(p => p.status === 'approved').length, color:'#6ee7b7' }].map(s => (
           <div key={s.label} style={{ borderRadius:'14px', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021', padding:'16px 20px' }}>
@@ -309,8 +362,8 @@ function ProofsTab() {
                 <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.3)' }}>{proof.ngoName} · Milestone {proof.milestoneNo}</div>
               </div>
               {typeof proof.aiScore === 'number' && (
-                <span style={{ fontSize:'11px', fontWeight:700, padding:'3px 8px', borderRadius:'999px', whiteSpace:'nowrap', ...(proof.aiScore > 85 ? { background:'rgba(16,185,129,0.15)', color:'#6ee7b7', border:'1px solid rgba(16,185,129,0.3)' } : proof.aiScore >= 55 ? { background:'rgba(245,158,11,0.15)', color:'#fcd34d', border:'1px solid rgba(245,158,11,0.3)' } : { background:'rgba(239,68,68,0.15)', color:'#fca5a5', border:'1px solid rgba(239,68,68,0.3)' }) }}>
-                  {proof.aiScore > 85 ? '✅' : proof.aiScore >= 55 ? '🗳️' : '❌'} {proof.aiScore}%
+                <span style={{ fontSize:'11px', fontWeight:700, padding:'3px 8px', borderRadius:'999px', whiteSpace:'nowrap', ...(proof.aiScore >= 65 ? { background:'rgba(245,158,11,0.15)', color:'#fcd34d', border:'1px solid rgba(245,158,11,0.3)' } : { background:'rgba(239,68,68,0.15)', color:'#fca5a5', border:'1px solid rgba(239,68,68,0.3)' }) }}>
+                  {proof.aiScore >= 65 ? '🗳️' : '❌'} {proof.aiScore}%
                 </span>
               )}
               <span style={{ fontSize:'11px', fontWeight:700, padding:'4px 10px', borderRadius:'999px', whiteSpace:'nowrap', ...(PROOF_STATUS_STYLE[proof.status] || PROOF_STATUS_STYLE.pending_admin_review) }}>
@@ -325,7 +378,6 @@ function ProofsTab() {
                 )}
               </div>
             </div>
-
             {expanded === proof.id && (
               <div style={{ padding:'20px 28px 24px', borderBottom:'1px solid rgba(255,255,255,0.06)', background:'rgba(255,255,255,0.018)' }}>
                 {proof.aiSummary && (
@@ -412,7 +464,6 @@ function NgoRequestsTab() {
         <ConfirmModal title="Permanently delete?" message={`This will permanently remove ${confirm.req.orgName || confirm.req.name || 'this organisation'} and revoke all access. Cannot be undone.`} confirmLabel="Yes, Delete" confirmStyle={{ background:'linear-gradient(135deg,#dc2626,#991b1b)' }} onConfirm={() => deleteOrg(confirm.req)} onCancel={() => setConfirm(null)} />
       )}
 
-      {/* Stats */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px', marginBottom:'28px' }}>
         {[{ label:'Total', val:requests.length, color:'#a78bfa' }, { label:'Pending', val:requests.filter(r => r.status === 'pending').length, color:'#fcd34d' }, { label:'Approved', val:requests.filter(r => r.status === 'approved').length, color:'#6ee7b7' }, { label:'Rejected', val:requests.filter(r => r.status === 'rejected').length, color:'#fca5a5' }].map(s => (
           <div key={s.label} style={{ borderRadius:'14px', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021', padding:'16px 20px' }}>
@@ -442,15 +493,13 @@ function NgoRequestsTab() {
         ) : shown.length === 0 ? (
           <div style={{ padding:'60px', textAlign:'center', color:'rgba(255,255,255,0.3)', fontSize:'14px' }}>No requests found.</div>
         ) : shown.map(req => {
-          const rv  = req.aiVerification;
-          const rl  = rv?.riskLevel;
-          const rs  = rl ? RISK_STYLE[rl] : null;
+          const rv = req.aiVerification;
+          const rl = rv?.riskLevel;
+          const rs = rl ? RISK_STYLE[rl] : null;
           return (
             <div key={req.id}>
-              {/* Main row */}
               <div onClick={() => setExpanded(expanded === req.id ? null : req.id)}
                 style={{ display:'grid', gridTemplateColumns:'1fr auto auto auto', gap:'12px', padding:'16px 28px', cursor:'pointer', alignItems:'center', borderBottom:'1px solid rgba(255,255,255,0.04)', background: expanded === req.id ? 'rgba(255,255,255,0.025)' : 'transparent', transition:'background 0.15s' }}>
-
                 <div style={{ display:'flex', alignItems:'center', gap:'10px', minWidth:0 }}>
                   {req.photoURL
                     ? <img src={req.photoURL} alt={req.name} referrerPolicy="no-referrer" style={{ width:'34px', height:'34px', borderRadius:'50%', objectFit:'cover', flexShrink:0 }} />
@@ -461,19 +510,14 @@ function NgoRequestsTab() {
                     <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.35)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{req.orgName || req.email}</div>
                   </div>
                 </div>
-
-                {/* Risk badge — only shown if verification exists */}
                 {rs && (
                   <span style={{ fontSize:'11px', fontWeight:700, padding:'3px 10px', borderRadius:'999px', whiteSpace:'nowrap', background:rs.bg, color:rs.color, border:`1px solid ${rs.border}` }}>
-                    {rs.icon} {rl} RISK · {rv.riskScore}
+                    {rs.icon} {rl} · {rv.riskScore}
                   </span>
                 )}
-
                 <span style={{ fontSize:'11px', fontWeight:700, padding:'4px 10px', borderRadius:'999px', whiteSpace:'nowrap', ...(STATUS_STYLE[req.status] || STATUS_STYLE.pending) }}>
                   {req.status || 'pending'}
                 </span>
-
-                {/* Actions */}
                 <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', flexShrink:0 }} onClick={e => e.stopPropagation()}>
                   {req.status === 'pending'  && <><button onClick={() => approve(req)} style={{ padding:'5px 10px', borderRadius:'7px', background:'rgba(16,185,129,0.2)', color:'#6ee7b7', fontWeight:700, fontSize:'11px', cursor:'pointer', border:'1px solid rgba(16,185,129,0.35)', whiteSpace:'nowrap' }}>✓ Approve</button><button onClick={() => setConfirm({ type:'reject', req })} style={{ padding:'5px 10px', borderRadius:'7px', background:'rgba(239,68,68,0.15)', color:'#fca5a5', fontWeight:700, fontSize:'11px', cursor:'pointer', border:'1px solid rgba(239,68,68,0.3)', whiteSpace:'nowrap' }}>✕ Reject</button></>}
                   {req.status === 'approved' && <button onClick={() => setConfirm({ type:'reject', req })} style={{ padding:'5px 10px', borderRadius:'7px', background:'rgba(239,68,68,0.15)', color:'#fca5a5', fontWeight:700, fontSize:'11px', cursor:'pointer', border:'1px solid rgba(239,68,68,0.3)', whiteSpace:'nowrap' }}>Revoke</button>}
@@ -482,23 +526,20 @@ function NgoRequestsTab() {
                 </div>
               </div>
 
-              {/* Expanded details */}
               {expanded === req.id && (
                 <div style={{ padding:'24px 28px 28px', borderBottom:'1px solid rgba(255,255,255,0.06)', background:'rgba(255,255,255,0.018)', display:'flex', flexDirection:'column', gap:'20px' }}>
-
-                  {/* Basic declared info */}
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px,1fr))', gap:'14px' }}>
                     {[
-                      { label:'Email',          val: req.email           },
-                      { label:'Org type',        val: req.orgType         },
-                      { label:'Reg number',      val: req.regNumber       },
-                      { label:'PAN number',      val: req.panNumber       },
-                      { label:'Year est.',       val: req.yearEstablished },
-                      { label:'Location',        val: req.city && req.state ? `${req.city}, ${req.state}` : req.city || req.state },
-                      { label:'Contact person',  val: req.contactName     },
-                      { label:'Phone',           val: req.contactPhone    },
-                      { label:'Website',         val: req.website         },
-                      { label:'Submitted',       val: req.createdAt?.seconds ? new Date(req.createdAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }) : '—' },
+                      { label:'Email',         val: req.email           },
+                      { label:'Org type',       val: req.orgType         },
+                      { label:'Reg number',     val: req.regNumber       },
+                      { label:'PAN number',     val: req.panNumber       },
+                      { label:'Year est.',      val: req.yearEstablished },
+                      { label:'Location',       val: req.city && req.state ? `${req.city}, ${req.state}` : req.city || req.state },
+                      { label:'Contact person', val: req.contactName     },
+                      { label:'Phone',          val: req.contactPhone    },
+                      { label:'Website',        val: req.website         },
+                      { label:'Submitted',      val: req.createdAt?.seconds ? new Date(req.createdAt.seconds * 1000).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }) : '—' },
                     ].filter(f => f.val).map(f => (
                       <div key={f.label}>
                         <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.28)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'3px' }}>{f.label}</div>
@@ -516,7 +557,6 @@ function NgoRequestsTab() {
                     </div>
                   )}
 
-                  {/* Documents */}
                   {req.documents && Object.keys(req.documents).some(k => req.documents[k]) ? (
                     <div>
                       <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.28)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'10px' }}>Uploaded Documents</div>
@@ -528,19 +568,13 @@ function NgoRequestsTab() {
                     <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.2)', fontStyle:'italic' }}>No documents uploaded.</div>
                   )}
 
-                  {/* AI Verification breakdown */}
                   <div>
                     <div style={{ fontSize:'11px', fontWeight:700, color:'rgba(255,255,255,0.4)', letterSpacing:'1.5px', textTransform:'uppercase', marginBottom:'14px' }}>
                       🔍 AI Verification Report
                     </div>
-                    <VerificationBreakdown
-                      aiVerification={req.aiVerification}
-                      regNumber={req.regNumber}
-                      orgName={req.orgName}
-                    />
+                    <VerificationBreakdown aiVerification={req.aiVerification} regNumber={req.regNumber} orgName={req.orgName} />
                   </div>
 
-                  {/* Danger zone */}
                   <div style={{ padding:'16px', borderRadius:'12px', border:'1px solid rgba(239,68,68,0.2)', background:'rgba(239,68,68,0.05)', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px', flexWrap:'wrap' }}>
                     <div>
                       <div style={{ fontSize:'12px', fontWeight:700, color:'#fca5a5', marginBottom:'3px' }}>Danger Zone</div>
