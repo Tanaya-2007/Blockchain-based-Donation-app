@@ -55,82 +55,225 @@ function runFormatChecks(form) {
   return { checks, score };
 }
 
-/* ─── risk score calculator ───────────────────────────── */
-function calculateRiskScore(formatScore, aiResult) {
-  // Format checks: 30% weight
-  const formatPoints = Math.round(formatScore * 0.30);
-  // AI authenticity: 40% weight
-  const aiAuth  = typeof aiResult?.documentAuthenticityScore === 'number'
-    ? Math.round(aiResult.documentAuthenticityScore * 0.40)
-    : 20; // neutral if no AI
-  // Name match: 20% weight
-  const namePoints = aiResult?.nameMatch === true ? 20 : aiResult?.nameMatch === false ? 0 : 10;
-  // Reg match: 10% weight
-  const regPoints  = aiResult?.regNumberMatch === true ? 10 : aiResult?.regNumberMatch === false ? 0 : 5;
+/* ─── risk score calculator ────────────────────────────────────────────────
+   The AI confidence_score IS the primary score. Format checks only add a
+   small bonus (max +10) on top — they can NEVER compensate for a bad document.
 
-  const total = Math.min(100, formatPoints + aiAuth + namePoints + regPoints);
+   Logic:
+   • AI confidence_score drives everything (0-100 from AI)
+   • Format bonus: max +10 added only if AI score >= 65 (don't reward valid forms with bad docs)
+   • Final >= 65 → MEDIUM → admin review
+   • Final <  65 → HIGH   → auto-rejected immediately
+   • No auto-approve — admin must always sign off
+   ──────────────────────────────────────────────────────────────────────── */
+function calculateRiskScore(formatScore, aiResult) {
+  const aiConfidence = typeof aiResult?.confidence_score === 'number'
+    ? Math.max(0, Math.min(100, aiResult.confidence_score))
+    : 0;
+
+  // Format bonus: only reward good form data when the document itself is also good
+  // Max +10 points, never enough to push a bad doc (< 65) over the threshold
+  const formatBonus = aiConfidence >= 65 ? Math.round(formatScore * 0.10) : 0;
+
+  const total = Math.min(100, aiConfidence + formatBonus);
+
+  // Build breakdown for admin panel display
+  const breakdown = {
+    aiConfidence,
+    formatBonus,
+    documentClassification: aiResult?.document_classification || 'unknown',
+    decision: aiResult?.decision || (total >= 65 ? 'manual_review' : 'reject'),
+  };
+
   return {
     total,
-    breakdown: { formatPoints, aiAuth, namePoints, regPoints },
-    level: total >= 80 ? 'LOW' : total >= 55 ? 'MEDIUM' : 'HIGH',
+    breakdown,
+    level: total >= 65 ? 'MEDIUM' : 'HIGH',
   };
 }
 
-/* ─── Gemini/Claude verification of org documents ─────── */
+/* ─── AI document verification ────────────────────────────────────────────
+   Uses the strict deduction-based prompt (start 100, deduct heavily).
+   • No image → score 0 immediately, no API call
+   • Wrong document type → deduct 80-95 → well below 65 threshold
+   • Unrelated image / screenshot / code → deduct 95 → score ~5
+   • Real certificate, name/reg mismatch → score 35-50
+   • Real certificate, all matches → score 70-95
+   ──────────────────────────────────────────────────────────────────────── */
 async function verifyOrgWithAI(form, imgBase64, imgType) {
-  const prompt = `You are TransparentFund's organisation verification AI. Analyze the uploaded registration certificate.
+  // Hard gate: no image = score 0, don't even call the API
+  if (!imgBase64) {
+    return {
+      document_classification: 'no_image',
+      confidence_score:        0,
+      decision:                'reject',
+      matched_fields: { organization_name: false, registration_number: false, location: false, purpose: false },
+      extracted_text_summary:  'No image provided — PDF uploaded or file missing.',
+      red_flags: [
+        'Registration certificate uploaded as PDF — AI can only analyze JPG/PNG images',
+        'Re-upload the registration certificate as a clear JPG or PNG photo',
+      ],
+      reasoning: 'No image was available for analysis. Score set to 0. Application auto-rejected.',
+      // Legacy fields kept for AdminPanel VerificationBreakdown compatibility
+      extractedOrgName:          null,
+      extractedRegNumber:        null,
+      extractedAuthority:        null,
+      extractedDate:             null,
+      nameMatch:                 false,
+      regNumberMatch:            false,
+      documentAuthenticityScore: 0,
+      documentType:              'No image provided',
+      redFlags: ['PDF uploaded — AI requires JPG/PNG image for verification', 'Re-upload as a clear photo of the registration certificate'],
+      summary:  'No image available. Score 0. Auto-rejected.',
+    };
+  }
 
-Declared details:
-- Organisation name: "${form.orgName}"
-- Registration number: "${form.regNumber}"
-- Type: "${form.orgType}"
-- Location: "${form.city}, ${form.state}"
-- Year established: "${form.yearEstablished || 'not provided'}"
-- PAN number: "${form.panNumber || 'not provided'}"
+  const prompt = `You are a STRICT NGO document verification engine for a donation platform called TransparentFund.
 
-Return ONLY valid JSON (no markdown, no extra text):
+YOUR ROLE: Reject anything suspicious, unrelated, mismatched, incomplete, or fake-looking. Do NOT be generous.
+
+REGISTRATION FORM DETAILS (what the applicant declared):
+- Organisation Name: "${form.orgName}"
+- Registration Number: "${form.regNumber}"
+- PAN Number: "${form.panNumber}"
+- Organisation Type: "${form.orgType}"
+- City: "${form.city}"
+- State: "${form.state}"
+- Year Established: "${form.yearEstablished || 'not provided'}"
+- Contact Name: "${form.contactName}"
+- Mission: "${form.description}"
+
+EXPECTED DOCUMENT: Indian NGO / Trust / Society / Section-8 Company Registration Certificate
+
+VERIFICATION STEPS (in order):
+
+STEP 1 — DOCUMENT RELEVANCE:
+Classify the uploaded image as one of:
+  correct_document — it IS a registration/incorporation certificate for an Indian NGO/Trust/Society
+  wrong_document   — it is a document but NOT a registration certificate (e.g. PAN card, bank statement, invoice)
+  unrelated_image  — completely unrelated (photo, product image, screenshot of website/app)
+  code_image       — screenshot of code, terminal, IDE, or programming content
+  screenshot       — screenshot of a webpage, UI, or digital document
+  blank            — blank, mostly empty, or unreadable image
+
+STEP 2 — OCR & READABILITY:
+Extract any text visible. Can you read organisation name and registration number clearly?
+
+STEP 3 — AUTHENTICITY SIGNALS:
+Look for: edited/pasted text, mixed fonts, suspicious logos, AI-generated artifacts, inconsistent layout,
+unnatural seals or signatures, impossible dates, cropped or cut corners.
+
+STEP 4 — DATA MATCH:
+Compare what you see in the document against the declared details.
+
+STEP 5 — RISK SCORING (START FROM 100, DEDUCT):
+Apply these deductions:
+  wrong_document:   -80
+  unrelated_image:  -95
+  code_image:       -95
+  screenshot:       -90
+  blank:            -100
+  Unreadable:       -40
+  Name mismatch:    -25
+  Reg# mismatch:    -35
+  Suspicious edits: -40
+  AI-generated:     -45
+  Missing official structure (no seal, no authority name, no date): -30
+
+MINIMUM SCORES BY CLASSIFICATION:
+  code_image or unrelated_image: score MUST be ≤ 10
+  wrong_document: score MUST be ≤ 25
+  screenshot: score MUST be ≤ 15
+  correct_document with all matches: score 70–95
+
+Return ONLY valid JSON — no markdown, no extra text, no backticks:
 {
-  "extractedOrgName": "<exact org name found in document, or null>",
-  "extractedRegNumber": "<registration number in document, or null>",
-  "extractedAuthority": "<issuing authority name, or null>",
-  "extractedDate": "<registration date if visible, or null>",
-  "nameMatch": <true if extracted name matches declared name (ignore case/spacing), false if mismatch, null if unable to extract>,
-  "regNumberMatch": <true if reg numbers match, false if mismatch, null if unable to extract>,
-  "documentAuthenticityScore": <0-100 — visual authenticity of the document>,
-  "documentType": "<what this document appears to be>",
-  "redFlags": ["<specific red flag if any, keep to max 3>"],
-  "summary": "<one sentence overall assessment>"
-}
-
-Be strict but fair. If document is unclear, score 50. If clearly forged (wrong fonts, pasted logos, inconsistent text), score < 40.`;
+  "document_classification": "<correct_document|wrong_document|unrelated_image|code_image|screenshot|blank>",
+  "confidence_score": <integer 0-100 after deductions>,
+  "decision": "<reject|manual_review>",
+  "matched_fields": {
+    "organization_name": <true|false|null>,
+    "registration_number": <true|false|null>,
+    "location": <true|false|null>,
+    "purpose": <true|false|null>
+  },
+  "extracted_text_summary": "<key text extracted from the document, or explain why none was found>",
+  "red_flags": ["<specific flag 1>", "<specific flag 2>"],
+  "reasoning": "<2-3 sentences explaining your classification and score>",
+  "extractedOrgName": "<org name found in doc or null>",
+  "extractedRegNumber": "<reg number found in doc or null>",
+  "extractedAuthority": "<issuing authority or null>",
+  "extractedDate": "<date visible or null>",
+  "nameMatch": <true|false|null>,
+  "regNumberMatch": <true|false|null>,
+  "documentAuthenticityScore": <same as confidence_score>,
+  "documentType": "<same as document_classification in readable form>",
+  "redFlags": ["<same as red_flags>"],
+  "summary": "<same as reasoning in one sentence>"
+}`;
 
   try {
-    const content = imgBase64
-      ? [{ type: 'image', source: { type: 'base64', media_type: imgType, data: imgBase64 } }, { type: 'text', text: prompt }]
-      : prompt + '\n\nNo image provided — return neutral assessment with null extracted fields.';
-
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 600,
-        messages: [{ role: 'user', content }],
+        model:      'claude-sonnet-4-20250514',
+        max_tokens: 900,
+        messages: [{
+          role:    'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: imgType, data: imgBase64 } },
+            { type: 'text',  text: prompt },
+          ],
+        }],
       }),
     });
     const data = await res.json();
     const raw  = data.content?.[0]?.text ?? '';
-    return JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
+    const parsed = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
+
+    // Enforce minimum scores per classification — model must not override these
+    const cls = parsed.document_classification || '';
+    const enforceMax = {
+      code_image:      10,
+      unrelated_image: 10,
+      screenshot:      15,
+      wrong_document:  25,
+      blank:           0,
+    };
+    if (enforceMax[cls] !== undefined) {
+      parsed.confidence_score        = Math.min(parsed.confidence_score ?? 0, enforceMax[cls]);
+      parsed.documentAuthenticityScore = parsed.confidence_score;
+    }
+
+    // Always clamp between 0-100
+    parsed.confidence_score        = Math.max(0, Math.min(100, parsed.confidence_score ?? 0));
+    parsed.documentAuthenticityScore = parsed.confidence_score;
+
+    // Enforce decision consistency with score
+    parsed.decision = parsed.confidence_score >= 65 ? 'manual_review' : 'reject';
+
+    return parsed;
   } catch (e) {
-    // Non-blocking — return neutral fallback so submission still works
+    // API error — score 0, don't give neutral
     return {
-      extractedOrgName: null, extractedRegNumber: null,
-      extractedAuthority: null, extractedDate: null,
-      nameMatch: null, regNumberMatch: null,
-      documentAuthenticityScore: 55,
-      documentType: 'Unable to analyze',
-      redFlags: ['AI verification unavailable — manual review required'],
-      summary: 'AI service unavailable. Admin must manually verify documents.',
+      document_classification: 'api_error',
+      confidence_score:        0,
+      decision:                'reject',
+      matched_fields: { organization_name: null, registration_number: null, location: null, purpose: null },
+      extracted_text_summary:  'AI service unavailable.',
+      red_flags:               ['AI verification service error — admin must manually verify'],
+      reasoning:               'AI verification failed. Score set to 0. Admin must manually verify all documents.',
+      extractedOrgName:          null,
+      extractedRegNumber:        null,
+      extractedAuthority:        null,
+      extractedDate:             null,
+      nameMatch:                 null,
+      regNumberMatch:            null,
+      documentAuthenticityScore: 0,
+      documentType:              'AI error',
+      redFlags:                  ['AI verification failed — manual review required'],
+      summary:                   'AI service error. Score 0.',
     };
   }
 }
@@ -225,6 +368,12 @@ function FileField({ docDef, value, error, onChange }) {
         </span>
       </div>
       {value && !error && <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.25)', marginTop:'4px' }}>{(value.size/1024/1024).toFixed(2)} MB{value.type.startsWith('image/') && ' · will be compressed'}</div>}
+      {/* Warn if PDF — AI can't analyze it */}
+      {value && !error && value.type === 'application/pdf' && docDef.key === 'regCertificate' && (
+        <div style={{ fontSize:'11px', color:'#fcd34d', marginTop:'4px', padding:'6px 10px', borderRadius:'8px', background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.25)' }}>
+          ⚠ PDF uploaded — AI can only analyze images (JPG/PNG). For higher verification score, upload as image.
+        </div>
+      )}
     </div>
   );
 }
@@ -263,20 +412,18 @@ export default function NgoDashboard() {
   const [docFiles,  setDocFiles]  = useState({});
   const [docErrors, setDocErrors] = useState({});
 
-  // Upload progress
   const [uploading,   setUploading]   = useState(false);
   const [uploadLabel, setUploadLabel] = useState('');
   const [uploadPct,   setUploadPct]   = useState(0);
   const [totalFiles,  setTotalFiles]  = useState(0);
   const [doneFiles,   setDoneFiles]   = useState(0);
 
-  // Verification progress (separate phase after upload)
-  const [verifying,     setVerifying]     = useState(false);
-  const [verifyLabel,   setVerifyLabel]   = useState('');
-  const [verifyStep,    setVerifyStep]    = useState(0); // 0-4
+  const [verifying,   setVerifying]   = useState(false);
+  const [verifyLabel, setVerifyLabel] = useState('');
+  const [verifyStep,  setVerifyStep]  = useState(0);
 
-  const setField       = (k, v) => { setForm(f => ({ ...f, [k]: v })); setTouched(t => ({ ...t, [k]: true })); };
-  const getError       = k => VALIDATORS[k] ? VALIDATORS[k](form[k]) : null;
+  const setField        = (k, v) => { setForm(f => ({ ...f, [k]: v })); setTouched(t => ({ ...t, [k]: true })); };
+  const getError        = k => VALIDATORS[k] ? VALIDATORS[k](form[k]) : null;
   const handleDocChange = (key, file) => {
     if (!file) return;
     const err = file.size > MAX_BYTES ? `Too large (max ${MAX_MB} MB)` : null;
@@ -349,7 +496,7 @@ export default function NgoDashboard() {
         const raw        = docFiles[docDef.key];
         const compressed = await compressImage(raw);
 
-        // Capture reg certificate as base64 for AI analysis
+        // Capture reg certificate as base64 for AI analysis — only if it's an image
         if (docDef.key === 'regCertificate' && raw.type.startsWith('image/')) {
           await new Promise(res => {
             const reader = new FileReader();
@@ -371,31 +518,33 @@ export default function NgoDashboard() {
     /* ── PHASE 2: Verification pipeline ── */
     setVerifying(true);
 
-    // Step 1: Format checks
     setVerifyLabel('Validating PAN, registration number, phone format…');
     setVerifyStep(1);
     const formatResult = runFormatChecks(form);
-    await new Promise(r => setTimeout(r, 400)); // brief pause so UI shows progress
+    await new Promise(r => setTimeout(r, 400));
 
-    // Step 2: AI document extraction + authenticity
     setVerifyLabel('Running AI document analysis on registration certificate…');
     setVerifyStep(2);
     const aiResult = await verifyOrgWithAI(form, regCertBase64, regCertType);
 
-    // Step 3: Cross-document consistency
     setVerifyLabel('Cross-checking document consistency…');
     setVerifyStep(3);
     await new Promise(r => setTimeout(r, 300));
 
-    // Step 4: Risk score
     setVerifyLabel('Calculating risk score…');
     setVerifyStep(4);
     const riskScore = calculateRiskScore(formatResult.score, aiResult);
     await new Promise(r => setTimeout(r, 200));
 
-    // Step 5: Save to Firestore
-    setVerifyLabel('Saving registration for admin review…');
+    setVerifyLabel('Saving registration…');
     setVerifyStep(5);
+
+    /* ── THRESHOLD LOGIC ──────────────────────────────
+       riskScore.total >= 65 → MEDIUM → status = 'pending' (goes to admin)
+       riskScore.total < 65  → HIGH   → status = 'rejected' (auto-rejected)
+       There is no auto-approval — admin must always approve.
+       ──────────────────────────────────────────────────── */
+    const finalStatus = riskScore.total >= 65 ? 'pending' : 'rejected';
 
     try {
       await addDoc(collection(db, 'ngoRequests'), {
@@ -403,33 +552,39 @@ export default function NgoDashboard() {
         email:    user.email       || '',
         name:     user.displayName || '',
         photoURL: user.photoURL    || '',
-        status:   'pending',
+        status:   finalStatus,
         ...form,
         documents: urls,
-        // ── Verification data stored for admin ──
         aiVerification: {
-          formatChecks:       formatResult.checks,
-          formatScore:        formatResult.score,
+          formatChecks:    formatResult.checks,
+          formatScore:     formatResult.score,
           aiExtracted: {
             orgName:      aiResult.extractedOrgName,
             regNumber:    aiResult.extractedRegNumber,
             authority:    aiResult.extractedAuthority,
             registeredOn: aiResult.extractedDate,
-            documentType: aiResult.documentType,
+            documentType: aiResult.document_classification || aiResult.documentType,
           },
-          aiScore:       aiResult.documentAuthenticityScore,
-          nameMatch:     aiResult.nameMatch,
-          regMatch:      aiResult.regNumberMatch,
-          redFlags:      aiResult.redFlags || [],
-          aiSummary:     aiResult.summary,
-          riskScore:     riskScore.total,
-          riskLevel:     riskScore.level,
-          scoreBreakdown: riskScore.breakdown,
-          verifiedAt:    new Date().toISOString(),
+          // Primary AI score — confidence_score from new prompt, fallback to legacy field
+          aiScore:                aiResult.confidence_score ?? aiResult.documentAuthenticityScore ?? 0,
+          documentClassification: aiResult.document_classification || 'unknown',
+          aiDecision:             aiResult.decision || 'reject',
+          matchedFields:          aiResult.matched_fields || {},
+          extractedTextSummary:   aiResult.extracted_text_summary || '',
+          reasoning:              aiResult.reasoning || aiResult.summary || '',
+          nameMatch:              aiResult.nameMatch ?? aiResult.matched_fields?.organization_name ?? null,
+          regMatch:               aiResult.regNumberMatch ?? aiResult.matched_fields?.registration_number ?? null,
+          redFlags:               aiResult.red_flags || aiResult.redFlags || [],
+          aiSummary:              aiResult.reasoning || aiResult.summary || '',
+          riskScore:              riskScore.total,
+          riskLevel:              riskScore.level,
+          scoreBreakdown:         riskScore.breakdown,
+          verifiedAt:             new Date().toISOString(),
         },
         createdAt: serverTimestamp(),
       });
-      setStatus('pending');
+      // Show the correct state based on AI outcome
+      setStatus(finalStatus);
     } catch (e) {
       alert('Submission failed: ' + e.message);
     } finally {
@@ -437,12 +592,10 @@ export default function NgoDashboard() {
     }
   };
 
-  /* ── Loading state ── */
   if (status === 'loading') return (
     <div style={{ padding:'80px 48px', color:'rgba(255,255,255,0.35)', fontSize:'14px' }}>Loading…</div>
   );
 
-  /* ── Approved state ── */
   if (status === 'approved') return (
     <>
       {showPopup && <ApprovalPopup onClose={() => setShowPopup(false)} />}
@@ -508,7 +661,7 @@ export default function NgoDashboard() {
         <div style={{ fontSize:'52px', marginBottom:'16px' }}>⏳</div>
         <h2 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'24px', fontWeight:800, color:'#fff', marginBottom:'10px' }}>Application under review</h2>
         <p style={{ color:'rgba(255,255,255,0.45)', fontSize:'14px', lineHeight:1.7, marginBottom:'20px' }}>
-          Your registration has been submitted and AI-verified. An admin will review the results within 1–2 business days.
+          AI verification passed. Your application is now with an admin who will review your documents within 1–2 business days.
         </p>
         <div style={{ padding:'12px 16px', borderRadius:'10px', marginBottom:'24px', border:'1px solid rgba(245,158,11,0.3)', background:'rgba(245,158,11,0.1)', fontSize:'13px', color:'#fcd34d', lineHeight:1.6 }}>
           💡 After approval, sign out and sign back in to unlock the full NGO dashboard.
@@ -520,10 +673,21 @@ export default function NgoDashboard() {
 
   if (status === 'rejected') return (
     <div style={{ minHeight:'calc(100vh - 68px)', display:'flex', alignItems:'center', justifyContent:'center', padding:'40px 16px' }}>
-      <div style={{ width:'100%', maxWidth:'480px', padding:'40px', borderRadius:'20px', border:'1px solid rgba(239,68,68,0.35)', background:'rgba(239,68,68,0.05)', textAlign:'center' }}>
+      <div style={{ width:'100%', maxWidth:'520px', padding:'40px', borderRadius:'20px', border:'1px solid rgba(239,68,68,0.35)', background:'rgba(239,68,68,0.05)', textAlign:'center' }}>
         <div style={{ fontSize:'52px', marginBottom:'16px' }}>❌</div>
-        <h2 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'24px', fontWeight:800, color:'#fff', marginBottom:'10px' }}>Application rejected</h2>
-        <p style={{ color:'rgba(255,255,255,0.45)', fontSize:'14px', lineHeight:1.7, marginBottom:'24px' }}>Please review your details and reapply with corrected documents.</p>
+        <h2 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'24px', fontWeight:800, color:'#fff', marginBottom:'10px' }}>Application rejected by AI verification</h2>
+        <p style={{ color:'rgba(255,255,255,0.45)', fontSize:'14px', lineHeight:1.7, marginBottom:'16px' }}>
+          Your registration certificate could not be verified. This happens when:
+        </p>
+        <div style={{ padding:'14px 16px', borderRadius:'12px', marginBottom:'20px', border:'1px solid rgba(239,68,68,0.3)', background:'rgba(239,68,68,0.08)', fontSize:'13px', color:'#fca5a5', lineHeight:1.8, textAlign:'left' }}>
+          • The registration certificate was uploaded as a PDF (upload as JPG/PNG image)<br />
+          • The document does not show your organisation name + registration number<br />
+          • The name/reg number in the document doesn't match what you declared<br />
+          • The document appears to be a different type of file
+        </div>
+        <p style={{ color:'rgba(255,255,255,0.4)', fontSize:'13px', marginBottom:'24px' }}>
+          Please reapply with a clear JPG/PNG photo of your registration certificate where your organisation name and registration number are clearly visible.
+        </p>
         <div style={{ display:'flex', gap:'10px', justifyContent:'center' }}>
           <button onClick={() => setStatus('none')} style={{ padding:'11px 24px', borderRadius:'10px', border:'none', background:'#7c3aed', color:'#fff', fontWeight:700, fontSize:'13px', cursor:'pointer' }}>Reapply</button>
           <Link to="/" style={{ display:'inline-block', padding:'11px 24px', borderRadius:'10px', border:'1px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.06)', color:'#fff', fontWeight:600, fontSize:'13px', textDecoration:'none' }}>← Home</Link>
@@ -545,7 +709,12 @@ export default function NgoDashboard() {
           Fill in your details and upload documents. Our AI pipeline verifies every submission before admin review.
         </p>
 
-        {/* Verification pipeline explainer */}
+        {/* Threshold info */}
+        <div style={{ padding:'14px 18px', borderRadius:'12px', marginBottom:'24px', border:'1px solid rgba(245,158,11,0.25)', background:'rgba(245,158,11,0.06)', fontSize:'13px', color:'#fcd34d', lineHeight:1.7 }}>
+          ⚠️ <strong>Important:</strong> Upload your Registration Certificate as a <strong>JPG or PNG image</strong> (not PDF) for AI verification. If uploaded as PDF, the AI cannot analyze it and your application will be auto-rejected. Score ≥ 65 → Admin review. Score &lt; 65 → Auto-rejected.
+        </div>
+
+        {/* Pipeline explainer */}
         <div style={{ padding:'16px 20px', borderRadius:'14px', marginBottom:'28px', border:'1px solid rgba(124,58,237,0.25)', background:'rgba(124,58,237,0.06)' }}>
           <div style={{ fontSize:'11px', fontWeight:700, color:'#c4b5fd', letterSpacing:'1px', textTransform:'uppercase', marginBottom:'10px' }}>Verification pipeline</div>
           <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
@@ -572,11 +741,11 @@ export default function NgoDashboard() {
 
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px', marginBottom:'16px' }}>
             <Field label="Registration / Certificate number" required error={getError('regNumber')} touched={touched.regNumber}
-              hint="e.g. MH/NGO/12345/2018 — must match your registration certificate exactly">
+              hint="Must match exactly what's on your registration certificate">
               <input value={form.regNumber} onChange={e => setField('regNumber', e.target.value)} onBlur={() => setTouched(t => ({ ...t, regNumber:true }))} placeholder="e.g. MH/NGO/12345/2018" style={inp(getError('regNumber'), touched.regNumber)} />
             </Field>
             <Field label="Organisation PAN number" required error={getError('panNumber')} touched={touched.panNumber}
-              hint="Format: ABCDE1234F — 10 characters, must match your PAN card">
+              hint="Format: ABCDE1234F — must match your PAN card">
               <input value={form.panNumber} onChange={e => setField('panNumber', e.target.value.toUpperCase().slice(0,10))} onBlur={() => setTouched(t => ({ ...t, panNumber:true }))} placeholder="e.g. AABCH1234C" maxLength={10} style={inp(getError('panNumber'), touched.panNumber)} />
             </Field>
           </div>
@@ -617,15 +786,16 @@ export default function NgoDashboard() {
 
           <div style={SEC}>Verification documents</div>
           <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.3)', marginBottom:'18px', lineHeight:1.6 }}>
-            PDF, JPG or PNG — max {MAX_MB} MB each. The registration certificate will be analyzed by AI to extract and verify your organisation details.
-            <span style={{ color:'#f87171' }}> *</span> = required.
+            PDF, JPG or PNG — max {MAX_MB} MB each.<br />
+            <strong style={{ color:'#fcd34d' }}>⚠ Upload the Registration Certificate as JPG/PNG (not PDF)</strong> — AI can only analyze images.<br />
+            <span style={{ color:'#f87171' }}>*</span> = required.
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:'16px', marginBottom:'28px' }}>
             {REQUIRED_DOCS.map(d => <FileField key={d.key} docDef={d} value={docFiles[d.key]} error={docErrors[d.key]} onChange={handleDocChange} />)}
           </div>
 
           <div style={{ padding:'14px 16px', borderRadius:'10px', marginBottom:'24px', border:'1px solid rgba(34,211,238,0.25)', background:'rgba(34,211,238,0.06)', fontSize:'13px', color:'#67e8f9', lineHeight:1.65 }}>
-            📋 After submission, AI will verify your documents and calculate a risk score. An admin reviews the results within 1–2 business days.
+            📋 After submission, AI will analyze your registration certificate and calculate a risk score. Score ≥ 65 → Admin review within 1–2 business days. Score &lt; 65 → Auto-rejected with reason.
           </div>
 
           {/* Upload progress */}
@@ -647,8 +817,8 @@ export default function NgoDashboard() {
               <div style={{ fontSize:'13px', fontWeight:600, color:'#67e8f9', marginBottom:'14px' }}>🤖 {verifyLabel}</div>
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                 {VERIFY_STEPS.map((step, i) => {
-                  const done    = i < verifyStep;
-                  const active  = i === verifyStep - 1 || (verifyStep === 0 && i === 0);
+                  const done   = i < verifyStep;
+                  const active = i === verifyStep - 1 || (verifyStep === 0 && i === 0);
                   return (
                     <div key={i} style={{ display:'flex', alignItems:'center', gap:'10px', fontSize:'12px' }}>
                       <div style={{
