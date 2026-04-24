@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { collection, deleteDoc, doc, getDocs, orderBy, query, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, orderBy, query, updateDoc, getDoc, addDoc, serverTimestamp, increment } from 'firebase/firestore';
 import { db } from '../firebase';
+import { releaseMilestoneFunds } from '../utils/blockchain';
 
 /* ─── constants ───────────────────────────────────────── */
 const PAGE_SIZE = 10;
@@ -805,14 +806,50 @@ function ProofsTab() {
   const approveProof = async (proof) => {
     setActioning(proof.id);
     try {
-      await updateDoc(doc(db,'proofs',proof.id), { status:'approved', reviewedAt:new Date() });
+      // 1. Fetch Campaign data to get amount
+      const campDoc = await getDoc(doc(db, 'campaigns', proof.campaignId));
+      if (!campDoc.exists()) throw new Error('Campaign not found');
+      const campData = campDoc.data();
+      const milestone = campData.milestones?.[proof.milestoneNo - 1] || {};
+      const rawAmount = milestone.amount || (campData.targetAmount / (campData.milestones?.length || 1));
+
+      // 2. Blockchain call
+      const ngoWallet = campData.ngoWallet || "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B";
+      const ethAmount = (rawAmount * 0.000001).toFixed(6);
+      let bchainTxId = '';
+      try {
+        bchainTxId = await releaseMilestoneFunds(proof.campaignId, ngoWallet, ethAmount);
+      } catch(err) {
+        console.error("Blockchain release failed", err);
+        throw new Error("Blockchain transaction failed. " + err.message);
+      }
+
+      // 3. Update Firestore
+      await updateDoc(doc(db,'proofs',proof.id), { 
+        status:'approved', 
+        reviewedAt:new Date(),
+        txHash: bchainTxId 
+      });
       await updateDoc(doc(db,'campaigns',proof.campaignId), {
         [`milestones.${proof.milestoneNo-1}.status`]:'verified',
         currentMilestone: proof.milestoneNo + 1,
+        releasedFunds: increment(rawAmount),
       });
+
+      // 4. Ledger Event
+      await addDoc(collection(db, 'ledger'), {
+        type: 'milestone_release',
+        campaignId: proof.campaignId,
+        campaignTitle: proof.campaignTitle || campData.title,
+        amount: rawAmount,
+        txHash: bchainTxId,
+        milestoneNo: proof.milestoneNo,
+        createdAt: serverTimestamp(),
+      });
+
       setProofs(p => p.map(x => x.id===proof.id ? {...x,status:'approved'} : x));
       show(`✓ Milestone ${proof.milestoneNo} approved — funds released`,'success');
-    } catch(e) { show(e.message,'error'); }
+    } catch(e) { console.error(e); show(e.message,'error'); }
     setActioning(null);
   };
 
@@ -916,6 +953,14 @@ function ProofsTab() {
                 <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.2)' }}>
                   Submitted: {proof.uploadedAt?.seconds ? new Date(proof.uploadedAt.seconds*1000).toLocaleString('en-IN') : '—'}
                 </div>
+                {proof.txHash && (
+                  <div style={{ marginTop:'12px', fontSize:'11px', color:'#a78bfa', background:'rgba(124,58,237,0.1)', padding:'10px', borderRadius:'8px', border:'1px solid rgba(124,58,237,0.2)' }}>
+                    🔒 <strong>Blockchain Tx:</strong> <span style={{fontFamily:'monospace'}}>{proof.txHash}</span>
+                    {proof.txHash.startsWith('0x') && (
+                      <a href={`https://amoy.polygonscan.com/tx/${proof.txHash}`} target="_blank" rel="noreferrer" style={{ marginLeft:'8px', color:'#34d399', textDecoration:'none', fontWeight:'bold' }}>Explorer ↗</a>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

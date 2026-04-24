@@ -7,6 +7,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { db } from '../firebase';
+import { donateToCampaign } from '../utils/blockchain';
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 const PAYS = [
@@ -77,7 +78,7 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
   }, [finalAmt, remaining]);
 
   const saveDonation = async ({ paymentId, orderId }) => {
-    await addDoc(collection(db, 'donations'), {
+    const docRef = await addDoc(collection(db, 'donations'), {
       donorId:           user.uid,
       donorName:         user.displayName || '',
       donorEmail:        user.email || '',
@@ -105,6 +106,7 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
       paymentId:     paymentId || null,
       createdAt:     serverTimestamp(),
     });
+    return docRef.id;
   };
 
   const handle = async () => {
@@ -151,10 +153,28 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
               });
               const verify = await verifyRes.json();
               if (!verify.verified) throw new Error('Payment verification failed');
-              await saveDonation({ paymentId: response.razorpay_payment_id, orderId: response.razorpay_order_id });
-              setTxHash(response.razorpay_payment_id);
+              const donationId = await saveDonation({ paymentId: response.razorpay_payment_id, orderId: response.razorpay_order_id });
+              
+              onToast("Payment successful! Locking funds on Blockchain...", "success");
+              
+              // Scale demo amount for testnet
+              const ethAmount = (finalAmt * 0.000001).toFixed(6);
+              let bchainTxId = '';
+              try {
+                 bchainTxId = await donateToCampaign(campaign.id, ethAmount);
+                 
+                 await updateDoc(doc(db, 'donations', donationId), {
+                    txHash: bchainTxId,
+                    status: 'locked_onchain'
+                 });
+              } catch (err) {
+                 console.error("Blockchain error: ", err);
+                 onToast("Failed to lock on blockchain. Saved off-chain only.", "warning");
+              }
+
+              setTxHash(bchainTxId || response.razorpay_payment_id);
               setSuccess(true);
-              onToast(`✅ ₹${finalAmt.toLocaleString('en-IN')} donated — locked until milestone verified`, 'success');
+              onToast(`✅ ₹${finalAmt.toLocaleString('en-IN')} donated & locked on Blockchain!`, 'success');
               resolve();
             } catch (e) { reject(e); }
           },
@@ -280,10 +300,17 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
                 {remaining===0 ? '🎉 This campaign has now reached its goal!' : `⏳ ₹${remaining.toLocaleString('en-IN')} still needed`}
               </div>
             )}
-            <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:'rgba(255,255,255,0.3)', marginBottom:'8px' }}>Razorpay Payment ID</div>
-            <div style={{ fontFamily:'monospace', fontSize:'11px', color:'#a78bfa', background:'rgba(255,255,255,0.04)', borderRadius:'10px', padding:'12px', marginBottom:'16px', border:'1px solid rgba(255,255,255,0.08)', wordBreak:'break-all' }}>{txHash}</div>
+            <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:'rgba(255,255,255,0.3)', marginBottom:'8px' }}>Blockchain Transaction Hash</div>
+            <div style={{ fontFamily:'monospace', fontSize:'11px', color:'#a78bfa', background:'rgba(255,255,255,0.04)', borderRadius:'10px', padding:'12px', marginBottom:'16px', border:'1px solid rgba(255,255,255,0.08)', wordBreak:'break-all' }}>
+              {txHash} 
+              {txHash.startsWith('0x') && (
+                <div style={{ marginTop: '8px' }}>
+                  <a href={`https://amoy.polygonscan.com/tx/${txHash}`} target="_blank" rel="noreferrer" style={{ color:'#34d399', textDecoration:'none' }}>View on Explorer ↗</a>
+                </div>
+              )}
+            </div>
             <div style={{ fontSize:'12px', color:'#a78bfa', padding:'12px 16px', borderRadius:'10px', border:'1px solid rgba(124,58,237,0.25)', background:'rgba(124,58,237,0.08)', marginBottom:'20px', lineHeight:1.6 }}>
-              🔒 Funds locked. Releases after NGO uploads proof and AI verifies it.
+              🔒 Funds successfully locked on Blockchain. Releases after NGO uploads proof and Admin verifies it.
             </div>
             <button onClick={onClose} style={{ width:'100%', padding:'13px', borderRadius:'12px', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.07)', color:'#fff', fontWeight:700, fontSize:'14px', cursor:'pointer' }}>Done</button>
           </div>

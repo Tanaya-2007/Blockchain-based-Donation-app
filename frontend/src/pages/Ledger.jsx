@@ -49,7 +49,7 @@ export default function Ledger() {
             amtRaw:  data.amount || 0,
             time:    fmtDate(data.createdAt),
             ts:      data.createdAt?.seconds || 0,
-            hash:    fakeTxHash(d.id),
+            hash:    data.txHash || fakeTxHash(d.id),
             method:  data.method || '',
             status:  data.status || 'locked',
           };
@@ -66,7 +66,7 @@ export default function Ledger() {
             amtRaw:  0,
             time:    fmtDate(data.uploadedAt),
             ts:      data.uploadedAt?.seconds || 0,
-            hash:    fakeTxHash(d.id),
+            hash:    data.txHash || fakeTxHash(d.id),
             status:  data.status || 'pending_admin_review',
           };
         });
@@ -159,14 +159,14 @@ export default function Ledger() {
         ) : (
           <div>
             {/* Column headers */}
-            <div style={{ display: 'grid', gridTemplateColumns: '80px 90px 1fr 1fr 100px 80px', padding: '10px 28px', borderBottom: '1px solid rgba(255,255,255,0.05)', gap: '12px' }}>
-              {['#', 'Type', 'Campaign', 'Details', 'Time', 'Amount'].map(h => (
+            <div style={{ display: 'grid', gridTemplateColumns: '80px 100px 1fr 100px 1.5fr 100px 80px', padding: '10px 28px', borderBottom: '1px solid rgba(255,255,255,0.05)', gap: '12px' }}>
+              {['#', 'Type', 'Campaign', 'Tx Hash', 'Details', 'Time', 'Amount'].map(h => (
                 <div key={h} style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)' }}>{h}</div>
               ))}
             </div>
 
             {shown.map((e, i) => (
-              <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '80px 90px 1fr 1fr 100px 80px', gap: '12px', padding: '14px 28px', borderBottom: i < shown.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', alignItems: 'center', transition: 'background 0.15s' }}
+              <div key={e.id} style={{ display: 'grid', gridTemplateColumns: '80px 100px 1fr 100px 1.5fr 100px 80px', gap: '12px', padding: '14px 28px', borderBottom: i < shown.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none', alignItems: 'center', transition: 'background 0.15s' }}
                 onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
                 onMouseLeave={ev => ev.currentTarget.style.background = 'transparent'}>
 
@@ -183,6 +183,15 @@ export default function Ledger() {
                 {/* Campaign */}
                 <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {e.camp}
+                </div>
+
+                {/* Tx Hash */}
+                <div style={{ fontFamily: 'monospace', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {e.hash.startsWith('0x') ? (
+                    <a href={`https://amoy.polygonscan.com/tx/${e.hash}`} target="_blank" rel="noreferrer" style={{color: '#a78bfa', textDecoration:'none'}} title={e.hash}>
+                      {e.hash.slice(0, 10)}...
+                    </a>
+                  ) : <span style={{color: 'rgba(255,255,255,0.3)'}}>{e.hash.slice(0,10)}...</span>}
                 </div>
 
                 {/* Details */}

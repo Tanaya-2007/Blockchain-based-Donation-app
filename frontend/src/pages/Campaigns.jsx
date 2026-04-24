@@ -99,6 +99,8 @@ export default function Campaigns({ onDonate }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
           {shown.map(c => {
             const raised    = c.raisedAmount || 0;
+            const released  = c.releasedFunds || 0;
+            const locked    = Math.max(0, raised - released);
             const target    = c.targetAmount || 0;
             const remaining = Math.max(0, target - raised);
             const pct       = target ? Math.min(Math.round((raised / target) * 100), 100) : 0;
@@ -157,6 +159,18 @@ export default function Campaigns({ onDonate }) {
                   </div>
                   <div style={{ height: '4px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', marginBottom: '8px', overflow: 'hidden' }}>
                     <div style={{ height: '100%', width: `${pct}%`, borderRadius: '4px', background: pct >= 100 ? 'linear-gradient(90deg,#10b981,#34d399)' : 'linear-gradient(90deg,#7c3aed,#0891b2)' }} />
+                  </div>
+
+                  {/* Blockchain Funds Info */}
+                  <div style={{ display: 'flex', gap:'12px', fontSize: '11px', color: 'rgba(255,255,255,0.45)', margin: '14px 0', padding: '10px 14px', background: 'rgba(124,58,237,0.05)', borderRadius: '8px', border: '1px solid rgba(124,58,237,0.15)' }}>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight: 700, color: '#fcd34d'}}>₹{locked.toLocaleString('en-IN')}</div>
+                      <div style={{fontSize: '9px', letterSpacing:'0.5px'}}>LOCKED (CHAIN)</div>
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontWeight: 700, color: '#6ee7b7'}}>₹{released.toLocaleString('en-IN')}</div>
+                      <div style={{fontSize: '9px', letterSpacing:'0.5px'}}>RELEASED (CHAIN)</div>
+                    </div>
                   </div>
 
                   {/* Goal + remaining — fixed layout, no overflow */}
