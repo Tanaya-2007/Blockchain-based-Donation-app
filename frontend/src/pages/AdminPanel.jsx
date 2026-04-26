@@ -814,11 +814,11 @@ function ProofsTab() {
       const rawAmount = milestone.amount || (campData.targetAmount / (campData.milestones?.length || 1));
 
       // 2. Blockchain call
+      // For local testing, we fallback to a standard hardhat/test address if ngoWallet is missing
       const ngoWallet = campData.ngoWallet || "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B";
-      const ethAmount = (rawAmount * 0.000001).toFixed(6);
       let bchainTxId = '';
       try {
-        bchainTxId = await releaseMilestoneFunds(proof.campaignId, ngoWallet, ethAmount);
+        bchainTxId = await releaseMilestoneFunds(proof.campaignId, ngoWallet);
       } catch(err) {
         console.error("Blockchain release failed", err);
         throw err;
