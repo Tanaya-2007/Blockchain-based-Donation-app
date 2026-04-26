@@ -46,7 +46,9 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
   const [success,        setSuccess]        = useState(false);
   const [txHash,         setTxHash]         = useState('');   // Razorpay payment ID
   const [bchainTxHash,   setBchainTxHash]   = useState('');   // blockchain tx hash
-  const [bchainStatus,   setBchainStatus]   = useState('');   // 'pending' | 'done' | 'skipped'
+  const [bchainStatus,   setBchainStatus]   = useState('');   // 'pending' | 'done' | 'failed'
+  const [bchainError,    setBchainError]    = useState('');
+  const [savedDonationId, setSavedDonationId] = useState(null);
   const [amtErr,         setAmtErr]         = useState('');
 
   const campaign  = liveCampaign;
@@ -96,6 +98,8 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
     const batch = writeBatch(db);
 
     const donationRef = doc(collection(db, 'donations'));
+    const generatedId = donationRef.id;
+
     batch.set(donationRef, {
       donorId:           user.uid,
       donorName:         user.displayName || '',
@@ -105,10 +109,10 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
       ngoId:             campaign.ngoId   || '',
       amount:            finalAmt,
       method:            pay,
-      status:            'locked',
+      status:            blockchainTx ? 'locked_onchain' : 'locked_fiat',
       razorpayPaymentId: paymentId       || null,
       razorpayOrderId:   orderId         || null,
-      blockchainTxHash:  blockchainTx    || null, // on-chain tx for transparency
+      blockchainTxHash:  blockchainTx    || null,
       createdAt:         serverTimestamp(),
     });
 
@@ -132,6 +136,32 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
     });
 
     await batch.commit();
+    return generatedId;
+  };
+
+  const retryBlockchain = async () => {
+    setBchainStatus('pending');
+    setBchainError('');
+    try {
+      const bchainTx = await donateToCampaign(campaign.id, BLOCKCHAIN_ETH_AMOUNT);
+      setBchainTxHash(bchainTx);
+      setBchainStatus('done');
+      
+      // Update the existing donation record
+      if (savedDonationId) {
+        // dynamic import of updateDoc to avoid rewriting imports at top
+        const { updateDoc } = await import('firebase/firestore');
+        await updateDoc(doc(db, 'donations', savedDonationId), {
+          blockchainTxHash: bchainTx,
+          status: 'locked_onchain'
+        });
+      }
+      onToast('Blockchain transaction confirmed!', 'success');
+    } catch (err) {
+      console.error('[Blockchain Retry] Error:', err);
+      setBchainStatus('failed');
+      setBchainError(err.message || 'Transaction failed');
+    }
   };
 
   /* ── main payment handler ── */
@@ -196,32 +226,34 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
               setTxHash(response.razorpay_payment_id);
               setSuccess(true);
 
-              /* Step 4 — blockchain transparency layer (non-blocking)
-                 We record a symbolic donation on-chain AFTER showing success.
-                 If MetaMask is cancelled or unavailable, donation still works — 
-                 blockchain is the transparency layer, not the payment gate.    */
+              /* Step 4 — blockchain transparency layer */
               setBchainStatus('pending');
+              setBchainError('');
+              let generatedDonId = null;
+
               try {
                 const bchainTx = await donateToCampaign(campaign.id, BLOCKCHAIN_ETH_AMOUNT);
                 setBchainTxHash(bchainTx);
                 setBchainStatus('done');
 
                 /* Step 5 — save to Firestore WITH blockchain tx hash */
-                await saveDonation({
+                generatedDonId = await saveDonation({
                   paymentId:   response.razorpay_payment_id,
                   orderId:     response.razorpay_order_id,
                   blockchainTx: bchainTx,
                 });
+                setSavedDonationId(generatedDonId);
               } catch (bchainErr) {
-                // Blockchain failed (MetaMask cancelled, wrong network, etc.)
-                // Still save to Firestore without blockchain tx — donation is valid
-                console.warn('[Blockchain] Non-blocking error:', bchainErr.message);
-                setBchainStatus('skipped');
-                await saveDonation({
+                console.error('[Blockchain] Blocking error:', bchainErr.message);
+                setBchainStatus('failed');
+                setBchainError(bchainErr.message);
+                
+                generatedDonId = await saveDonation({
                   paymentId:    response.razorpay_payment_id,
                   orderId:      response.razorpay_order_id,
                   blockchainTx: null,
                 });
+                setSavedDonationId(generatedDonId);
               }
 
               onToast(`✅ ₹${finalAmt.toLocaleString('en-IN')} donated — locked until milestone verified`, 'success');
@@ -409,9 +441,17 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
                   <div style={{ fontFamily:'monospace', fontSize:'10px', color:'rgba(255,255,255,0.4)', marginTop:'4px', wordBreak:'break-all' }}>{bchainTxHash}</div>
                 </div>
               )}
-              {bchainStatus === 'skipped' && (
-                <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.4)' }}>
-                  ⚠ Blockchain recording skipped (MetaMask unavailable). Donation is still valid.
+              {bchainStatus === 'failed' && (
+                <div>
+                  <div style={{ fontSize:'13px', color:'#f87171', fontWeight:600, marginBottom:'8px' }}>❌ Blockchain Sync Failed</div>
+                  <p style={{ fontSize:'11px', color:'rgba(255,255,255,0.5)', marginBottom:'12px', lineHeight:1.4 }}>
+                    Your Razorpay payment was successful, but locking it on the blockchain failed.
+                    <br/><br/><strong style={{color:'#fca5a5'}}>Error:</strong> {bchainError}
+                  </p>
+                  <button onClick={retryBlockchain}
+                    style={{ padding:'8px 16px', borderRadius:'8px', background:'rgba(239,68,68,0.15)', border:'1px solid rgba(239,68,68,0.3)', color:'#fca5a5', fontSize:'12px', fontWeight:700, cursor:'pointer' }}>
+                    Retry MetaMask Tx
+                  </button>
                 </div>
               )}
             </div>

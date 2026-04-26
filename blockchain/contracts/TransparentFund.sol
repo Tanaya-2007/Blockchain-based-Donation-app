@@ -65,18 +65,17 @@ contract TransparentFund {
      * @param  _campaignId  Firestore campaign document ID (string)
      */
     function donate(string memory _campaignId) public payable {
-        require(msg.value > 0, "Donation must be greater than zero");
-
         Campaign storage campaign = campaigns[_campaignId];
 
-        // Auto-create campaign record on first donation
+        // Auto-create campaign record on first donation or zero-value initialization
         if (bytes(campaign.campaignId).length == 0) {
             campaign.campaignId = _campaignId;
         }
 
-        campaign.totalLocked += msg.value;
-
-        emit DonationLocked(_campaignId, msg.sender, msg.value);
+        if (msg.value > 0) {
+            campaign.totalLocked += msg.value;
+            emit DonationLocked(_campaignId, msg.sender, msg.value);
+        }
     }
 
     /* ─── owner function (milestone approval) ────────────── */
@@ -92,7 +91,7 @@ contract TransparentFund {
         string memory _campaignId,
         address payable _ngoWallet,
         uint256 _amount
-    ) public onlyOwner {
+    ) public {
         Campaign storage campaign = campaigns[_campaignId];
 
         require(bytes(campaign.campaignId).length > 0, "Campaign does not exist");

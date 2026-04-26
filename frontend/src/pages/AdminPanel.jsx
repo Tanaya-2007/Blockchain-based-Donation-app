@@ -821,7 +821,7 @@ function ProofsTab() {
         bchainTxId = await releaseMilestoneFunds(proof.campaignId, ngoWallet, ethAmount);
       } catch(err) {
         console.error("Blockchain release failed", err);
-        throw new Error("Blockchain transaction failed. " + err.message);
+        throw err;
       }
 
       // 3. Update Firestore
@@ -937,11 +937,15 @@ function ProofsTab() {
             </div>
             {expanded === proof.id && (
               <div style={{ padding:'18px 20px 22px', borderBottom:'1px solid rgba(255,255,255,0.05)', background:'rgba(255,255,255,0.015)' }}>
-                {proof.aiSummary && (
-                  <div style={{ marginBottom:'12px', padding:'12px 14px', borderRadius:'10px', border:'1px solid rgba(124,58,237,0.2)', background:'rgba(124,58,237,0.05)', fontSize:'12px', color:'#c4b5fd' }}>
-                    🤖 {proof.aiSummary}
+                {(proof.aiVerification || proof.riskScore || proof.aiScore || proof.aiSummary) ? (
+                  <div style={{ marginBottom:'16px' }}>
+                    <VerificationBreakdown 
+                      aiVerification={proof.aiVerification || proof} 
+                      regNumber={proof.campaignId} 
+                      orgName={proof.ngoName} 
+                    />
                   </div>
-                )}
+                ) : null}
                 {proof.fileUrls?.length > 0 && (
                   <div style={{ marginBottom:'12px' }}>
                     <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.25)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'8px' }}>Documents</div>
