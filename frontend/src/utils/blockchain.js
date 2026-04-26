@@ -6,26 +6,25 @@ import { contractABI } from "./contractAbi";
 const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3"; 
 
 export const getProvider = () => {
-  if (window.ethereum) {
+  if (typeof window !== 'undefined' && window.ethereum) {
     return new ethers.BrowserProvider(window.ethereum);
   } else {
-    console.warn("No ethereum provider found. Please install MetaMask!");
-    return null;
+    throw new Error("MetaMask is not installed. Please install it to use the blockchain layer.");
   }
 };
 
 export const getSigner = async () => {
   const provider = getProvider();
-  if (provider) {
+  try {
     await provider.send("eth_requestAccounts", []);
-    return provider.getSigner();
+    return await provider.getSigner();
+  } catch (error) {
+    throw new Error("Failed to connect wallet. " + (error.message || ""));
   }
-  return null;
 };
 
 export const getContract = async (withSigner = false) => {
   const provider = getProvider();
-  if (!provider) return null;
 
   if (withSigner) {
     const signer = await getSigner();
@@ -50,6 +49,9 @@ export const donateToCampaign = async (campaignId, amountInEth) => {
     return tx.hash;
   } catch (error) {
     console.error("Donation failed: ", error);
+    if (error.code === 'ACTION_REJECTED') {
+      throw new Error("Transaction rejected in MetaMask.");
+    }
     throw error;
   }
 };

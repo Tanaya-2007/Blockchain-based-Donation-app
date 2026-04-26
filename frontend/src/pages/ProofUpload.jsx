@@ -348,7 +348,7 @@ Return ONLY valid JSON (no markdown):
         AI verifies every document — score determines outcome automatically
       </p>
 
-      {/* Scoring legend */}
+      {/* Scoring legend
       <div style={{ display:'flex', gap:'10px', marginBottom:'24px', flexWrap:'wrap' }}>
         {[
           { range:'Score > 85',  label:'AUTO APPROVE', color:'#34d399', bg:'rgba(16,185,129,0.1)',  border:'rgba(16,185,129,0.3)'  },
@@ -359,7 +359,7 @@ Return ONLY valid JSON (no markdown):
             {t.range} → {t.label}
           </div>
         ))}
-      </div>
+      </div> */}
 
       {/* Campaign selector */}
       {campaigns.length > 1 && (

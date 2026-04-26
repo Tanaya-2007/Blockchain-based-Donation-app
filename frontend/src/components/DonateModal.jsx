@@ -7,8 +7,14 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/useAuth';
 import { db } from '../firebase';
+import { donateToCampaign } from '../utils/blockchain';
 
 const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
+// Symbolic ETH amount recorded on-chain per donation for transparency
+// This is the blockchain transparency layer — actual ₹ amount is in Razorpay/Firestore
+const BLOCKCHAIN_ETH_AMOUNT = '0.0001';
+
 const PAYS = [
   { id:'UPI',        label:'📱 UPI'        },
   { id:'Card',       label:'💳 Card'        },
@@ -38,7 +44,9 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
   const [pay,            setPay]            = useState('UPI');
   const [processing,     setProcessing]     = useState(false);
   const [success,        setSuccess]        = useState(false);
-  const [txHash,         setTxHash]         = useState('');
+  const [txHash,         setTxHash]         = useState('');   // Razorpay payment ID
+  const [bchainTxHash,   setBchainTxHash]   = useState('');   // blockchain tx hash
+  const [bchainStatus,   setBchainStatus]   = useState('');   // 'pending' | 'done' | 'skipped'
   const [amtErr,         setAmtErr]         = useState('');
 
   const campaign  = liveCampaign;
@@ -49,7 +57,7 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
   const QUICK_AMOUNTS = [500, 1000, 2000, 5000].filter(a => remaining === 0 || a <= remaining);
   const finalAmt = custom ? Number(custom) : selectedAmt ? Number(selectedAmt) : 0;
 
-  /* ── realtime campaign listener when opened from campaign card ── */
+  /* ── realtime campaign listener ── */
   useEffect(() => {
     if (!initialCampaign?.id) return;
     return onSnapshot(doc(db, 'campaigns', initialCampaign.id),
@@ -57,7 +65,6 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
     );
   }, [initialCampaign?.id]);
 
-  /* ── load all active campaigns when no campaign pre-selected ── */
   useEffect(() => {
     if (initialCampaign) return;
     getDocs(query(collection(db, 'campaigns'), where('status', '==', 'active'))).then(snap => {
@@ -69,7 +76,6 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
     });
   }, [initialCampaign]);
 
-  /* ── realtime listener when campaign is selected from dropdown ── */
   useEffect(() => {
     if (!selectedCampId || initialCampaign) return;
     return onSnapshot(doc(db, 'campaigns', selectedCampId),
@@ -85,11 +91,10 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
     setAmtErr('');
   }, [finalAmt, remaining]);
 
-  /* ── FIXED: single batch write — all 3 succeed or none do ── */
-  const saveDonation = async ({ paymentId, orderId }) => {
+  /* ── atomic Firestore batch write ── */
+  const saveDonation = async ({ paymentId, orderId, blockchainTx }) => {
     const batch = writeBatch(db);
 
-    // 1. Create donation record
     const donationRef = doc(collection(db, 'donations'));
     batch.set(donationRef, {
       donorId:           user.uid,
@@ -101,35 +106,35 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
       amount:            finalAmt,
       method:            pay,
       status:            'locked',
-      razorpayPaymentId: paymentId || null,
-      razorpayOrderId:   orderId   || null,
+      razorpayPaymentId: paymentId       || null,
+      razorpayOrderId:   orderId         || null,
+      blockchainTxHash:  blockchainTx    || null, // on-chain tx for transparency
       createdAt:         serverTimestamp(),
     });
 
-    // 2. Update campaign raised amount + donor count
     const campaignRef = doc(db, 'campaigns', campaign.id);
     batch.update(campaignRef, {
       raisedAmount: increment(finalAmt),
       donorCount:   increment(1),
     });
 
-    // 3. Create ledger entry
     const ledgerRef = doc(collection(db, 'ledger'));
     batch.set(ledgerRef, {
-      type:          'donation',
-      campaignId:    campaign.id,
-      campaignTitle: campaign.title || '',
-      donorId:       user.uid,
-      donorName:     user.displayName || '',
-      amount:        finalAmt,
-      paymentId:     paymentId || null,
-      createdAt:     serverTimestamp(),
+      type:             'donation',
+      campaignId:       campaign.id,
+      campaignTitle:    campaign.title || '',
+      donorId:          user.uid,
+      donorName:        user.displayName || '',
+      amount:           finalAmt,
+      paymentId:        paymentId       || null,
+      blockchainTxHash: blockchainTx    || null,
+      createdAt:        serverTimestamp(),
     });
 
-    // All 3 writes committed atomically — if any fails, ALL fail (no partial state)
     await batch.commit();
   };
 
+  /* ── main payment handler ── */
   const handle = async () => {
     if (!user)                     { onClose(); nav('/login'); return; }
     if (isGoalMet)                 { onToast('Campaign has reached its goal!', 'error'); return; }
@@ -142,7 +147,7 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
       const loaded = await loadRazorpayScript();
       if (!loaded) throw new Error('Razorpay script failed to load. Check your internet connection.');
 
-      /* Step 1 — create order on backend */
+      /* Step 1 — create Razorpay order on backend */
       const orderRes = await fetch(`${BACKEND}/api/payment/create-order`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -174,7 +179,7 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
           },
           handler: async (response) => {
             try {
-              /* Step 3 — verify signature on backend */
+              /* Step 3 — verify Razorpay signature */
               const verifyRes = await fetch(`${BACKEND}/api/payment/verify`, {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -187,15 +192,38 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
               const verify = await verifyRes.json();
               if (!verify.verified) throw new Error('Payment signature verification failed');
 
-              /* Step 4 — atomic batch write to Firestore */
-              await saveDonation({
-                paymentId: response.razorpay_payment_id,
-                orderId:   response.razorpay_order_id,
-              });
-
-              /* Step 5 — only show success AFTER all writes succeed */
+              // Razorpay succeeded — show success screen immediately
               setTxHash(response.razorpay_payment_id);
               setSuccess(true);
+
+              /* Step 4 — blockchain transparency layer (non-blocking)
+                 We record a symbolic donation on-chain AFTER showing success.
+                 If MetaMask is cancelled or unavailable, donation still works — 
+                 blockchain is the transparency layer, not the payment gate.    */
+              setBchainStatus('pending');
+              try {
+                const bchainTx = await donateToCampaign(campaign.id, BLOCKCHAIN_ETH_AMOUNT);
+                setBchainTxHash(bchainTx);
+                setBchainStatus('done');
+
+                /* Step 5 — save to Firestore WITH blockchain tx hash */
+                await saveDonation({
+                  paymentId:   response.razorpay_payment_id,
+                  orderId:     response.razorpay_order_id,
+                  blockchainTx: bchainTx,
+                });
+              } catch (bchainErr) {
+                // Blockchain failed (MetaMask cancelled, wrong network, etc.)
+                // Still save to Firestore without blockchain tx — donation is valid
+                console.warn('[Blockchain] Non-blocking error:', bchainErr.message);
+                setBchainStatus('skipped');
+                await saveDonation({
+                  paymentId:    response.razorpay_payment_id,
+                  orderId:      response.razorpay_order_id,
+                  blockchainTx: null,
+                });
+              }
+
               onToast(`✅ ₹${finalAmt.toLocaleString('en-IN')} donated — locked until milestone verified`, 'success');
               resolve();
             } catch (e) {
@@ -255,7 +283,7 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
               <p style={{ color:'rgba(255,255,255,0.4)', fontSize:'13px', marginBottom:'16px' }}>{liveCampaign?.title}</p>
             )}
 
-            {/* Campaign stats bar */}
+            {/* Campaign stats */}
             {campaign && remaining > 0 && (
               <div style={{ padding:'10px 14px', borderRadius:'10px', marginBottom:'20px', border:'1px solid rgba(34,211,238,0.25)', background:'rgba(34,211,238,0.06)', fontSize:'12px', color:'#67e8f9', display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:'6px' }}>
                 <span>🎯 Goal: <strong>₹{target.toLocaleString('en-IN')}</strong></span>
@@ -277,9 +305,9 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
                   {QUICK_AMOUNTS.map(a => (
                     <button key={a} onClick={() => { setSelectedAmt(String(a)); setCustom(''); setAmtErr(''); }}
                       style={{ padding:'11px 0', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:700,
-                        border:      selectedAmt===String(a)&&!custom ? '1px solid rgba(124,58,237,0.8)' : '1px solid rgba(255,255,255,0.1)',
-                        background:  selectedAmt===String(a)&&!custom ? 'rgba(124,58,237,0.2)' : 'transparent',
-                        color:       selectedAmt===String(a)&&!custom ? '#c4b5fd' : 'rgba(255,255,255,0.45)',
+                        border:     selectedAmt===String(a)&&!custom ? '1px solid rgba(124,58,237,0.8)' : '1px solid rgba(255,255,255,0.1)',
+                        background: selectedAmt===String(a)&&!custom ? 'rgba(124,58,237,0.2)' : 'transparent',
+                        color:      selectedAmt===String(a)&&!custom ? '#c4b5fd' : 'rgba(255,255,255,0.45)',
                       }}>
                       ₹{a.toLocaleString('en-IN')}
                     </button>
@@ -293,13 +321,10 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
               <>
                 <div style={{ marginBottom: amtErr ? '6px' : '20px' }}>
                   <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:'rgba(255,255,255,0.3)', marginBottom:'8px' }}>Custom Amount (₹)</div>
-                  <input
-                    placeholder={remaining > 0 ? `Max ₹${remaining.toLocaleString('en-IN')}` : 'Enter amount'}
-                    type="number" min="1"
-                    value={custom}
+                  <input placeholder={remaining > 0 ? `Max ₹${remaining.toLocaleString('en-IN')}` : 'Enter amount'}
+                    type="number" min="1" value={custom}
                     onChange={e => { setCustom(e.target.value); setSelectedAmt(''); }}
-                    style={{ ...INP, border: amtErr ? '1px solid rgba(239,68,68,0.6)' : custom ? '1px solid rgba(124,58,237,0.6)' : '1px solid rgba(255,255,255,0.1)' }}
-                  />
+                    style={{ ...INP, border: amtErr ? '1px solid rgba(239,68,68,0.6)' : custom ? '1px solid rgba(124,58,237,0.6)' : '1px solid rgba(255,255,255,0.1)' }} />
                 </div>
                 {amtErr && (
                   <div style={{ fontSize:'12px', color:'#f87171', marginBottom:'16px', padding:'8px 12px', borderRadius:'8px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.25)' }}>
@@ -320,9 +345,7 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
                         border:     pay===p.id ? '1px solid rgba(34,211,238,0.7)' : '1px solid rgba(255,255,255,0.1)',
                         background: pay===p.id ? 'rgba(34,211,238,0.12)' : 'transparent',
                         color:      pay===p.id ? '#67e8f9' : 'rgba(255,255,255,0.4)',
-                      }}>
-                      {p.label}
-                    </button>
+                      }}>{p.label}</button>
                   ))}
                 </div>
               </>
@@ -331,25 +354,25 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
             {/* Security note */}
             {!isGoalMet && (
               <div style={{ padding:'14px 16px', borderRadius:'12px', marginBottom:'24px', border:'1px solid rgba(124,58,237,0.25)', background:'rgba(124,58,237,0.08)', fontSize:'12px', color:'#a78bfa', lineHeight:1.6 }}>
-                🔒 Secured by Razorpay. Funds locked until AI-verified milestone proof is approved.
+                🔒 Secured by Razorpay. Funds locked until AI-verified milestone proof is approved. Donation recorded on blockchain for full transparency.
               </div>
             )}
 
-            {/* CTA */}
+            {/* CTA button */}
             <button onClick={handle} disabled={processing || isGoalMet}
               style={{ width:'100%', padding:'15px', borderRadius:'12px',
-                border:      isGoalMet ? '1px solid rgba(16,185,129,0.3)' : 'none',
-                background:  isGoalMet ? 'rgba(16,185,129,0.2)' : processing ? 'rgba(124,58,237,0.35)' : 'linear-gradient(135deg,#7c3aed,#0891b2)',
-                color:       isGoalMet ? '#6ee7b7' : '#fff',
+                border:     isGoalMet ? '1px solid rgba(16,185,129,0.3)' : 'none',
+                background: isGoalMet ? 'rgba(16,185,129,0.2)' : processing ? 'rgba(124,58,237,0.35)' : 'linear-gradient(135deg,#7c3aed,#0891b2)',
+                color:      isGoalMet ? '#6ee7b7' : '#fff',
                 fontWeight:700, fontSize:'15px',
-                cursor:      processing || isGoalMet ? 'not-allowed' : 'pointer',
-                boxShadow:   isGoalMet ? 'none' : '0 0 24px rgba(124,58,237,0.3)',
+                cursor: processing || isGoalMet ? 'not-allowed' : 'pointer',
+                boxShadow: isGoalMet ? 'none' : '0 0 24px rgba(124,58,237,0.3)',
                 display:'flex', alignItems:'center', justifyContent:'center', gap:'8px',
               }}>
               {processing
                 ? <><span style={{ width:'16px', height:'16px', border:'2px solid rgba(255,255,255,0.3)', borderTopColor:'#fff', borderRadius:'50%', animation:'spin 0.8s linear infinite', display:'inline-block' }} />Opening payment…</>
-                : isGoalMet   ? '🎉 Goal Reached — Donations Closed'
-                : !user       ? '🔑 Sign in to Donate'
+                : isGoalMet    ? '🎉 Goal Reached — Donations Closed'
+                : !user        ? '🔑 Sign in to Donate'
                 : finalAmt > 0 ? `Pay ₹${finalAmt.toLocaleString('en-IN')} via Razorpay`
                 : 'Enter an amount to donate'}
             </button>
@@ -364,20 +387,41 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
             <p style={{ color:'rgba(255,255,255,0.4)', fontSize:'13px', marginBottom:'20px' }}>
               ₹{finalAmt.toLocaleString('en-IN')} locked — releases after AI-verified milestone proof
             </p>
-            {target > 0 && (
-              <div style={{ padding:'10px 14px', borderRadius:'10px', marginBottom:'20px', border:'1px solid rgba(34,211,238,0.2)', background:'rgba(34,211,238,0.05)', fontSize:'12px', color:'#67e8f9' }}>
-                {remaining === 0
-                  ? '🎉 This campaign has now reached its goal!'
-                  : `⏳ ₹${remaining.toLocaleString('en-IN')} still needed`}
-              </div>
-            )}
+
+            {/* Razorpay payment ID */}
             <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:'rgba(255,255,255,0.3)', marginBottom:'8px' }}>Razorpay Payment ID</div>
             <div style={{ fontFamily:'monospace', fontSize:'11px', color:'#a78bfa', background:'rgba(255,255,255,0.04)', borderRadius:'10px', padding:'12px', marginBottom:'16px', border:'1px solid rgba(255,255,255,0.08)', wordBreak:'break-all' }}>
               {txHash}
             </div>
-            <div style={{ fontSize:'12px', color:'#a78bfa', padding:'12px 16px', borderRadius:'10px', border:'1px solid rgba(124,58,237,0.25)', background:'rgba(124,58,237,0.08)', marginBottom:'20px', lineHeight:1.6 }}>
-              🔒 Funds locked. Releases after NGO uploads proof and AI verifies it.
+
+            {/* Blockchain transparency layer status */}
+            <div style={{ padding:'14px 16px', borderRadius:'12px', marginBottom:'16px', border:'1px solid rgba(124,58,237,0.25)', background:'rgba(124,58,237,0.06)', textAlign:'left' }}>
+              <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:'#c4b5fd', marginBottom:'10px' }}>Blockchain Transparency Layer</div>
+              {bchainStatus === 'pending' && (
+                <div style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'13px', color:'rgba(255,255,255,0.5)' }}>
+                  <span style={{ width:'14px', height:'14px', border:'2px solid rgba(255,255,255,0.2)', borderTopColor:'#c4b5fd', borderRadius:'50%', animation:'spin 0.8s linear infinite', display:'inline-block', flexShrink:0 }} />
+                  Waiting for MetaMask confirmation…
+                </div>
+              )}
+              {bchainStatus === 'done' && bchainTxHash && (
+                <div style={{ fontSize:'12px', color:'#6ee7b7' }}>
+                  ✅ Recorded on-chain
+                  <div style={{ fontFamily:'monospace', fontSize:'10px', color:'rgba(255,255,255,0.4)', marginTop:'4px', wordBreak:'break-all' }}>{bchainTxHash}</div>
+                </div>
+              )}
+              {bchainStatus === 'skipped' && (
+                <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.4)' }}>
+                  ⚠ Blockchain recording skipped (MetaMask unavailable). Donation is still valid.
+                </div>
+              )}
             </div>
+
+            {target > 0 && (
+              <div style={{ padding:'10px 14px', borderRadius:'10px', marginBottom:'16px', border:'1px solid rgba(34,211,238,0.2)', background:'rgba(34,211,238,0.05)', fontSize:'12px', color:'#67e8f9' }}>
+                {remaining === 0 ? '🎉 This campaign has now reached its goal!' : `⏳ ₹${remaining.toLocaleString('en-IN')} still needed`}
+              </div>
+            )}
+
             <button onClick={onClose} style={{ width:'100%', padding:'13px', borderRadius:'12px', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.07)', color:'#fff', fontWeight:700, fontSize:'14px', cursor:'pointer' }}>
               Done
             </button>
