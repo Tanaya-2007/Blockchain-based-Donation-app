@@ -6,7 +6,7 @@ import {
 import { useAuth } from '../auth/useAuth';
 import { db } from '../firebase';
 
-const CLOUD_NAME    = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
 /* ─── normalize Firestore milestones ──────────────────── */
@@ -20,7 +20,7 @@ function safeCampaign(raw) {
   if (!raw) return null;
   const c = { ...raw, milestones: normalizeMilestones(raw.milestones) };
   const total = Number(c.targetAmount) || 0;
-  const n     = c.milestones.length;
+  const n = c.milestones.length;
   // Fix old campaigns where amounts were saved as 0
   if (n > 0 && total > 0 && c.milestones.every(m => !m.amount || m.amount === 0)) {
     const per = Math.floor(total / n);
@@ -80,35 +80,35 @@ function uploadToCloudinary(file, onProgress) {
 
 /* ─── styles ──────────────────────────────────────────── */
 const MS_STYLE = {
-  verified:             { border:'1px solid rgba(16,185,129,0.4)',   background:'rgba(16,185,129,0.06)',  color:'#6ee7b7' },
-  approved:             { border:'1px solid rgba(16,185,129,0.4)',   background:'rgba(16,185,129,0.06)',  color:'#6ee7b7' },
-  pending_admin_review: { border:'1px solid rgba(245,158,11,0.45)', background:'rgba(245,158,11,0.08)', color:'#fcd34d' },
-  pending:              { border:'1px solid rgba(124,58,237,0.45)', background:'rgba(124,58,237,0.1)',  color:'#c4b5fd' },
-  locked:               { border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.03)',color:'rgba(255,255,255,0.3)' },
-  rejected:             { border:'1px solid rgba(239,68,68,0.35)',  background:'rgba(239,68,68,0.06)',  color:'#fca5a5' },
+  verified: { border: '1px solid rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.06)', color: '#6ee7b7' },
+  approved: { border: '1px solid rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.06)', color: '#6ee7b7' },
+  pending_admin_review: { border: '1px solid rgba(245,158,11,0.45)', background: 'rgba(245,158,11,0.08)', color: '#fcd34d' },
+  pending: { border: '1px solid rgba(124,58,237,0.45)', background: 'rgba(124,58,237,0.1)', color: '#c4b5fd' },
+  locked: { border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.3)' },
+  rejected: { border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.06)', color: '#fca5a5' },
 };
 const PILL = {
-  verified:             { background:'rgba(16,185,129,0.15)', color:'#6ee7b7', border:'1px solid rgba(16,185,129,0.3)'  },
-  approved:             { background:'rgba(16,185,129,0.15)', color:'#6ee7b7', border:'1px solid rgba(16,185,129,0.3)'  },
-  pending_admin_review: { background:'rgba(245,158,11,0.15)', color:'#fcd34d', border:'1px solid rgba(245,158,11,0.3)' },
-  pending:              { background:'rgba(245,158,11,0.15)', color:'#fcd34d', border:'1px solid rgba(245,158,11,0.3)'  },
-  locked:               { background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.3)', border:'1px solid rgba(255,255,255,0.08)' },
-  rejected:             { background:'rgba(239,68,68,0.15)',  color:'#fca5a5', border:'1px solid rgba(239,68,68,0.3)'   },
+  verified: { background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.3)' },
+  approved: { background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.3)' },
+  pending_admin_review: { background: 'rgba(245,158,11,0.15)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.3)' },
+  pending: { background: 'rgba(245,158,11,0.15)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.3)' },
+  locked: { background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.08)' },
+  rejected: { background: 'rgba(239,68,68,0.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)' },
 };
-const statusIcon  = { PASS:'✓', WARN:'⚠', FAIL:'✗' };
-const statusColor = { PASS:'#34d399', WARN:'#fbbf24', FAIL:'#f87171' };
+const statusIcon = { PASS: '✓', WARN: '⚠', FAIL: '✗' };
+const statusColor = { PASS: '#34d399', WARN: '#fbbf24', FAIL: '#f87171' };
 
 function deriveStatus(score) {
-  if (score > 85)  return 'approved';
+  if (score > 85) return 'approved';
   if (score >= 55) return 'pending_admin_review';
   return 'rejected';
 }
 
 function getPillLabel(status) {
   if (status === 'verified' || status === 'approved') return '✓ Verified';
-  if (status === 'pending_admin_review')              return '⏳ Under Review';
-  if (status === 'pending')                           return '⏳ Pending';
-  if (status === 'rejected')                          return '✗ Rejected';
+  if (status === 'pending_admin_review') return '⏳ Under Review';
+  if (status === 'pending') return '⏳ Pending';
+  if (status === 'rejected') return '✗ Rejected';
   return '🔒 Locked';
 }
 
@@ -116,8 +116,8 @@ export default function ProofUpload({ onToast }) {
   const { user } = useAuth();
   const fileRef = useRef();
 
-  const [campaigns,    setCampaigns]    = useState([]);
-  const [selCampaign,  setSelCampaign]  = useState(null);
+  const [campaigns, setCampaigns] = useState([]);
+  const [selCampaign, setSelCampaign] = useState(null);
   const [loadingCamps, setLoadingCamps] = useState(true);
 
   /* submittedProofs keyed by `campaignId_milestoneNo` (String) so each
@@ -125,16 +125,16 @@ export default function ProofUpload({ onToast }) {
      Populated from Firestore on mount.                                  */
   const [submittedProofs, setSubmittedProofs] = useState({});
 
-  const [uploaded,  setUploaded]  = useState([]);
-  const [fileObjs,  setFileObjs]  = useState([]);
-  const [drag,      setDrag]      = useState(false);
+  const [uploaded, setUploaded] = useState([]);
+  const [fileObjs, setFileObjs] = useState([]);
+  const [drag, setDrag] = useState(false);
 
   const [uploading, setUploading] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const [verifying, setVerifying] = useState(false);
-  const [result,    setResult]    = useState(null);
+  const [result, setResult] = useState(null);
   const [imgBase64, setImgBase64] = useState(null);
-  const [imgType,   setImgType]   = useState(null);
+  const [imgType, setImgType] = useState(null);
 
   /* ── Load campaigns + existing proofs from Firestore ── */
   useEffect(() => {
@@ -168,8 +168,8 @@ export default function ProofUpload({ onToast }) {
           if (!proofMap[key]) {
             proofMap[key] = {
               milestoneNo: Number(p.milestoneNo),
-              status:      p.status,
-              aiScore:     p.aiScore,
+              status: p.status,
+              aiScore: p.aiScore,
             };
           }
         });
@@ -188,7 +188,7 @@ export default function ProofUpload({ onToast }) {
 
   const handleFile = file => {
     if (!file) return;
-    setUploaded(prev => [...prev, { name: file.name, size: (file.size/1024/1024).toFixed(1)+' MB', icon:'📄' }]);
+    setUploaded(prev => [...prev, { name: file.name, size: (file.size / 1024 / 1024).toFixed(1) + ' MB', icon: '📄' }]);
     setFileObjs(prev => [...prev, file]);
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
@@ -201,20 +201,20 @@ export default function ProofUpload({ onToast }) {
   const saveProof = async (fileUrls, aiResult) => {
     if (!selCampaign) return;
     const currentMs = selCampaign.currentMilestone || 1;
-    const status    = deriveStatus(aiResult?.score ?? 0);
+    const status = deriveStatus(aiResult?.score ?? 0);
 
     await addDoc(collection(db, 'proofs'), {
-      campaignId:    selCampaign.id,
+      campaignId: selCampaign.id,
       campaignTitle: selCampaign.title || '',
-      ngoId:         user.uid,
-      ngoName:       user.displayName || '',
-      milestoneNo:   currentMs,
+      ngoId: user.uid,
+      ngoName: user.displayName || '',
+      milestoneNo: currentMs,
       fileUrls,
-      aiScore:       aiResult?.score   ?? null,
-      aiVerdict:     aiResult?.verdict ?? null,
-      aiSummary:     aiResult?.summary ?? null,
+      aiScore: aiResult?.score ?? null,
+      aiVerdict: aiResult?.verdict ?? null,
+      aiSummary: aiResult?.summary ?? null,
       status,
-      uploadedAt:    serverTimestamp(),
+      uploadedAt: serverTimestamp(),
     });
 
     if (status === 'approved') {
@@ -222,7 +222,7 @@ export default function ProofUpload({ onToast }) {
       const updatedMilestones = normalizeMilestones(selCampaign.milestones).map((m, i) =>
         i === msIndex ? { ...m, status: 'verified' } : m
       );
-      
+
       await updateDoc(doc(db, 'campaigns', selCampaign.id), {
         milestones: updatedMilestones,
         currentMilestone: currentMs + 1,
@@ -245,7 +245,7 @@ export default function ProofUpload({ onToast }) {
   /* ── Main verification flow ── */
   const runVerification = async () => {
     if (fileObjs.length === 0) { onToast('Upload at least one file first', 'error'); return; }
-    if (!selCampaign)          { onToast('Select a campaign first', 'error'); return; }
+    if (!selCampaign) { onToast('Select a campaign first', 'error'); return; }
 
     setUploading(true); setUploadPct(0);
     const fileUrls = [];
@@ -264,10 +264,10 @@ export default function ProofUpload({ onToast }) {
 
     setVerifying(true); setResult(null);
 
-    const ms      = selCampaign.currentMilestone || 1;
-    const msList  = normalizeMilestones(selCampaign.milestones);
-    const msAmt   = msList[ms - 1]?.amount || 0;
-    const msTitle = msList[ms - 1]?.title  || `Milestone ${ms}`;
+    const ms = selCampaign.currentMilestone || 1;
+    const msList = normalizeMilestones(selCampaign.milestones);
+    const msAmt = msList[ms - 1]?.amount || 0;
+    const msTitle = msList[ms - 1]?.title || `Milestone ${ms}`;
 
     const prompt = `You are TransparentFund's AI document verification engine.
 Campaign: "${selCampaign.title || 'Unknown'}"
@@ -280,26 +280,26 @@ Return ONLY valid JSON (no markdown):
     let aiResult = null;
     try {
       const content = imgBase64
-        ? [{ type:'image', source:{ type:'base64', media_type:imgType, data:imgBase64 } }, { type:'text', text:prompt }]
+        ? [{ type: 'image', source: { type: 'base64', media_type: imgType, data: imgBase64 } }, { type: 'text', text: prompt }]
         : prompt + '\n\nNo image — score 60, verdict DONOR_VOTE.';
 
-      const res  = await fetch('http://localhost:5000/api/ai/messages', {
-        method:'POST', headers:{ 'Content-Type':'application/json' },
-        body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000, messages:[{ role:'user', content }] }),
+      const res = await fetch('http://localhost:5000/api/ai/messages', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content }] }),
       });
       const data = await res.json();
-      aiResult   = JSON.parse((data.content?.[0]?.text ?? '').match(/\{[\s\S]*\}/)[0]);
+      aiResult = JSON.parse((data.content?.[0]?.text ?? '').match(/\{[\s\S]*\}/)[0]);
     } catch {
       aiResult = {
-        score:72, verdict:'DONOR_VOTE',
-        summary:'Document assessed — requires admin review.',
-        checks:[
-          { label:'AI/Forgery Detection',      status:'PASS', detail:'No manipulation detected' },
-          { label:'Document Authenticity',     status:'WARN', detail:'Could not fully verify issuer' },
-          { label:'Organisation Verification', status:'PASS', detail:'NGO identity matches registration' },
-          { label:'Amount Consistency',        status:'WARN', detail:'Amount needs cross-verification' },
-          { label:'Date & Timeline',           status:'PASS', detail:'Within acceptable date range' },
-          { label:'Format Integrity',          status:'PASS', detail:'Document format is standard' },
+        score: 72, verdict: 'DONOR_VOTE',
+        summary: 'Document assessed — requires admin review.',
+        checks: [
+          { label: 'AI/Forgery Detection', status: 'PASS', detail: 'No manipulation detected' },
+          { label: 'Document Authenticity', status: 'WARN', detail: 'Could not fully verify issuer' },
+          { label: 'Organisation Verification', status: 'PASS', detail: 'NGO identity matches registration' },
+          { label: 'Amount Consistency', status: 'WARN', detail: 'Amount needs cross-verification' },
+          { label: 'Date & Timeline', status: 'PASS', detail: 'Within acceptable date range' },
+          { label: 'Format Integrity', status: 'PASS', detail: 'Document format is standard' },
         ],
       };
     }
@@ -307,48 +307,48 @@ Return ONLY valid JSON (no markdown):
     setResult(aiResult);
     try { await saveProof(fileUrls, aiResult); } catch (e) { console.error('saveProof failed:', e); }
 
-    const label = aiResult.score > 85  ? '✅ AUTO-APPROVED — milestone funds released!'
-                : aiResult.score >= 55 ? '🗳️ Sent to admin review'
-                : '❌ AUTO-REJECTED — score too low';
+    const label = aiResult.score > 85 ? '✅ AUTO-APPROVED — milestone funds released!'
+      : aiResult.score >= 55 ? '🗳️ Sent to admin review'
+        : '❌ AUTO-REJECTED — score too low';
     onToast(`🤖 ${aiResult.score}% confidence · ${label}`, aiResult.score >= 55 ? 'success' : 'error');
     setVerifying(false);
   };
 
   /* ── Derived values ── */
-  const safeMilestones         = normalizeMilestones(selCampaign?.milestones);
-  const totalMilestones        = safeMilestones.length;
-  const currentMsNo            = selCampaign?.currentMilestone || 1;
-  const currentMsIndex         = currentMsNo - 1;
-  const currentMsObj           = safeMilestones[currentMsIndex];
-  const currentMsTitle         = currentMsObj?.title || '';
-  const allMilestonesComplete  = currentMsNo > totalMilestones && totalMilestones > 0;
+  const safeMilestones = normalizeMilestones(selCampaign?.milestones);
+  const totalMilestones = safeMilestones.length;
+  const currentMsNo = selCampaign?.currentMilestone || 1;
+  const currentMsIndex = currentMsNo - 1;
+  const currentMsObj = safeMilestones[currentMsIndex];
+  const currentMsTitle = currentMsObj?.title || '';
+  const allMilestonesComplete = currentMsNo > totalMilestones && totalMilestones > 0;
 
   // String key — consistent with load + save
-  const currentProofKey            = selCampaign ? `${String(selCampaign.id)}_${String(currentMsNo)}` : null;
-  const currentMsAlreadySubmitted  = currentProofKey ? !!submittedProofs[currentProofKey] : false;
-  const currentProofData           = currentProofKey ? submittedProofs[currentProofKey] : null;
+  const currentProofKey = selCampaign ? `${String(selCampaign.id)}_${String(currentMsNo)}` : null;
+  const currentMsAlreadySubmitted = currentProofKey ? !!submittedProofs[currentProofKey] : false;
+  const currentProofData = currentProofKey ? submittedProofs[currentProofKey] : null;
 
-  const s          = result?.score ?? 0;
+  const s = result?.score ?? 0;
   const scoreColor = s > 85 ? '#34d399' : s >= 55 ? '#fbbf24' : '#f87171';
 
   if (!loadingCamps && campaigns.length === 0) {
     return (
-      <div style={{ minHeight:'calc(100vh - 68px)', display:'flex', alignItems:'center', justifyContent:'center', padding:'40px 16px' }}>
-        <div style={{ textAlign:'center', maxWidth:'400px' }}>
-          <div style={{ fontSize:'48px', marginBottom:'16px' }}>📭</div>
-          <h3 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'22px', fontWeight:800, color:'#fff', marginBottom:'10px' }}>No active campaigns</h3>
-          <p style={{ color:'rgba(255,255,255,0.4)', fontSize:'14px' }}>Create a campaign first before uploading milestone proof.</p>
+      <div style={{ minHeight: 'calc(100vh - 68px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 16px' }}>
+        <div style={{ textAlign: 'center', maxWidth: '400px' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
+          <h3 style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: '22px', fontWeight: 800, color: '#fff', marginBottom: '10px' }}>No active campaigns</h3>
+          <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>Create a campaign first before uploading milestone proof.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1126px] px-4 sm:px-6 lg:px-12 py-6 sm:py-8" style={{ minHeight:'100vh' }}>
-      <h2 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'30px', fontWeight:800, color:'#fff', letterSpacing:'-0.5px', marginBottom:'6px' }}>
+    <div className="mx-auto w-full max-w-[1126px] px-4 sm:px-6 lg:px-12 py-6 sm:py-8" style={{ minHeight: '100vh' }}>
+      <h2 style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: '30px', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px', marginBottom: '6px' }}>
         Upload Milestone Proof
       </h2>
-      <p style={{ color:'rgba(255,255,255,0.35)', fontSize:'14px', marginBottom:'12px' }}>
+      <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: '14px', marginBottom: '12px' }}>
         AI verifies every document — score determines outcome automatically
       </p>
 
@@ -367,24 +367,24 @@ Return ONLY valid JSON (no markdown):
 
       {/* Campaign selector */}
       {campaigns.length > 1 && (
-        <div style={{ marginBottom:'16px' }}>
-          <label style={{ fontSize:'12px', fontWeight:600, color:'rgba(255,255,255,0.4)', display:'block', marginBottom:'8px' }}>Select campaign</label>
+        <div style={{ marginBottom: '16px' }}>
+          <label style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.4)', display: 'block', marginBottom: '8px' }}>Select campaign</label>
           <select value={selCampaign?.id || ''} onChange={e => handleCampaignChange(e.target.value)}
-            style={{ padding:'11px 14px', borderRadius:'10px', background:'#111827', color:'#fff', border:'1px solid rgba(255,255,255,0.12)', fontSize:'14px', outline:'none', cursor:'pointer', width:'100%', maxWidth:'400px' }}>
+            style={{ padding: '11px 14px', borderRadius: '10px', background: '#111827', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', fontSize: '14px', outline: 'none', cursor: 'pointer', width: '100%', maxWidth: '400px' }}>
             <option value="">Choose campaign…</option>
-            {campaigns.map(c => <option key={c.id} value={c.id} style={{ background:'#111827' }}>{c.title}</option>)}
+            {campaigns.map(c => <option key={c.id} value={c.id} style={{ background: '#111827' }}>{c.title}</option>)}
           </select>
         </div>
       )}
 
       {/* All milestones complete */}
       {selCampaign && allMilestonesComplete && (
-        <div style={{ padding:'40px 32px', borderRadius:'20px', border:'1px solid rgba(16,185,129,0.4)', background:'rgba(16,185,129,0.07)', textAlign:'center', marginBottom:'24px' }}>
-          <div style={{ fontSize:'52px', marginBottom:'16px' }}>🎉</div>
-          <h3 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'24px', fontWeight:800, color:'#fff', marginBottom:'8px' }}>
+        <div style={{ padding: '40px 32px', borderRadius: '20px', border: '1px solid rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.07)', textAlign: 'center', marginBottom: '24px' }}>
+          <div style={{ fontSize: '52px', marginBottom: '16px' }}>🎉</div>
+          <h3 style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: '24px', fontWeight: 800, color: '#fff', marginBottom: '8px' }}>
             All {totalMilestones} milestones complete!
           </h3>
-          <p style={{ color:'rgba(255,255,255,0.45)', fontSize:'14px', lineHeight:1.7 }}>
+          <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: '14px', lineHeight: 1.7 }}>
             Every milestone proof has been submitted for <strong>{selCampaign.title}</strong>.
           </p>
         </div>
@@ -393,25 +393,26 @@ Return ONLY valid JSON (no markdown):
       {/* Already submitted for current milestone */}
       {selCampaign && !allMilestonesComplete && currentMsAlreadySubmitted && (
         <div style={{
-          padding:'20px 24px', borderRadius:'16px', marginBottom:'20px',
+          padding: '20px 24px', borderRadius: '16px', marginBottom: '20px',
           border: currentProofData?.status === 'approved' ? '1px solid rgba(16,185,129,0.4)'
             : currentProofData?.status === 'rejected' ? '1px solid rgba(239,68,68,0.4)'
-            : '1px solid rgba(245,158,11,0.4)',
+              : '1px solid rgba(245,158,11,0.4)',
           background: currentProofData?.status === 'approved' ? 'rgba(16,185,129,0.07)'
             : currentProofData?.status === 'rejected' ? 'rgba(239,68,68,0.07)'
-            : 'rgba(245,158,11,0.07)',
+              : 'rgba(245,158,11,0.07)',
         }}>
-          <div style={{ fontSize:'14px', fontWeight:700, marginBottom:'6px',
+          <div style={{
+            fontSize: '14px', fontWeight: 700, marginBottom: '6px',
             color: currentProofData?.status === 'approved' ? '#6ee7b7'
               : currentProofData?.status === 'rejected' ? '#fca5a5' : '#fcd34d',
           }}>
             {currentProofData?.status === 'approved'
               ? '✅ Milestone proof approved — next milestone is now active'
               : currentProofData?.status === 'rejected'
-              ? '❌ Proof was rejected — please contact admin'
-              : `⏳ Proof submitted for Milestone ${currentMsNo} — awaiting admin review`}
+                ? '❌ Proof was rejected — please contact admin'
+                : `⏳ Proof submitted for Milestone ${currentMsNo} — awaiting admin review`}
           </div>
-          <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.4)' }}>
+          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>
             AI confidence score: <strong>{currentProofData?.aiScore ?? '—'}%</strong>
             {currentProofData?.status === 'pending_admin_review' && ' · You cannot re-upload until this is reviewed'}
           </div>
@@ -420,30 +421,30 @@ Return ONLY valid JSON (no markdown):
 
       {/* ── FIX: dynamic milestone document hint ── */}
       {selCampaign && !allMilestonesComplete && !currentMsAlreadySubmitted && currentMsObj && (
-        <div style={{ marginBottom:'20px', padding:'10px 14px', borderRadius:'10px', border:'1px solid rgba(34,211,238,0.2)', background:'rgba(34,211,238,0.05)', fontSize:'12px', color:'#67e8f9' }}>
+        <div style={{ marginBottom: '20px', padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(34,211,238,0.2)', background: 'rgba(34,211,238,0.05)', fontSize: '12px', color: '#67e8f9' }}>
           📋 <strong>Milestone {currentMsNo}{currentMsTitle ? ` — ${currentMsTitle}` : ''} documents:</strong>{' '}
           {getMilestoneHint(currentMsObj, currentMsIndex)}
         </div>
       )}
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:'24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
 
         {/* Left — Milestones */}
-        <div style={{ borderRadius:'18px', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021', padding:'24px' }}>
-          <h3 style={{ fontSize:'16px', fontWeight:700, color:'#fff', marginBottom:'8px' }}>Campaign Milestones</h3>
+        <div style={{ borderRadius: '18px', border: '1px solid rgba(255,255,255,0.08)', background: '#0d1021', padding: '24px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>Campaign Milestones</h3>
           {selCampaign ? (
             <>
-              <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.4)', marginBottom:'16px', padding:'10px 14px', borderRadius:'10px', border:'1px solid rgba(255,255,255,0.07)', background:'rgba(124,58,237,0.06)' }}>
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginBottom: '16px', padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.07)', background: 'rgba(124,58,237,0.06)' }}>
                 📋 {selCampaign.title}<br />
                 Goal: ₹{(selCampaign.targetAmount || 0).toLocaleString('en-IN')} · {totalMilestones} milestone{totalMilestones !== 1 ? 's' : ''}
               </div>
-              <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {safeMilestones.map((m, i) => {
-                  const msNo      = i + 1;
+                  const msNo = i + 1;
                   const isCurrent = msNo === currentMsNo && !allMilestonesComplete;
                   // String key — same format everywhere
-                  const proofKey  = `${String(selCampaign.id)}_${String(msNo)}`;
-                  const proof     = submittedProofs[proofKey];
+                  const proofKey = `${String(selCampaign.id)}_${String(msNo)}`;
+                  const proof = submittedProofs[proofKey];
 
                   let displayStatus;
                   if (m.status === 'verified' || m.status === 'approved') {
@@ -467,20 +468,20 @@ Return ONLY valid JSON (no markdown):
                   })();
 
                   return (
-                    <div key={i} style={{ padding:'14px 16px', borderRadius:'12px', ...(MS_STYLE[displayStatus] || MS_STYLE.locked) }}>
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
-                        <span style={{ fontSize:'13px', fontWeight:600 }}>{m.title || `Milestone ${msNo}`}</span>
-                        <span style={{ fontSize:'10px', fontWeight:700, padding:'3px 9px', borderRadius:'999px', ...(PILL[displayStatus] || PILL.locked) }}>
+                    <div key={i} style={{ padding: '14px 16px', borderRadius: '12px', ...(MS_STYLE[displayStatus] || MS_STYLE.locked) }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 600 }}>{m.title || `Milestone ${msNo}`}</span>
+                        <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 9px', borderRadius: '999px', ...(PILL[displayStatus] || PILL.locked) }}>
                           {getPillLabel(displayStatus)}
                         </span>
                       </div>
-                      <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.45)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span>₹{amt.toLocaleString('en-IN')}</span>
                         {isCurrent && !currentMsAlreadySubmitted && (
-                          <span style={{ color:'#c4b5fd', fontSize:'11px' }}>← Upload proof here</span>
+                          <span style={{ color: '#c4b5fd', fontSize: '11px' }}>← Upload proof here</span>
                         )}
                         {msNo > currentMsNo && (
-                          <span style={{ color:'rgba(255,255,255,0.2)', fontSize:'11px' }}>🔒 Locked</span>
+                          <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: '11px' }}>🔒 Locked</span>
                         )}
                       </div>
                     </div>
@@ -489,28 +490,28 @@ Return ONLY valid JSON (no markdown):
               </div>
             </>
           ) : (
-            <div style={{ color:'rgba(255,255,255,0.3)', fontSize:'13px' }}>Select a campaign to see milestones.</div>
+            <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: '13px' }}>Select a campaign to see milestones.</div>
           )}
         </div>
 
         {/* Right — Upload + AI */}
         <div>
           {(!selCampaign || allMilestonesComplete || currentMsAlreadySubmitted) ? (
-            <div style={{ borderRadius:'18px', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021', padding:'32px', textAlign:'center' }}>
-              <div style={{ fontSize:'40px', marginBottom:'12px' }}>
+            <div style={{ borderRadius: '18px', border: '1px solid rgba(255,255,255,0.08)', background: '#0d1021', padding: '32px', textAlign: 'center' }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>
                 {allMilestonesComplete ? '✅' : currentMsAlreadySubmitted ? '⏳' : '📋'}
               </div>
-              <div style={{ fontSize:'14px', fontWeight:600, color:'rgba(255,255,255,0.5)' }}>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'rgba(255,255,255,0.5)' }}>
                 {!selCampaign ? 'Select a campaign to begin'
-                 : allMilestonesComplete ? 'All milestones completed — no uploads needed'
-                 : 'Proof already submitted for this milestone'}
+                  : allMilestonesComplete ? 'All milestones completed — no uploads needed'
+                    : 'Proof already submitted for this milestone'}
               </div>
             </div>
           ) : (
             <>
-              <div style={{ borderRadius:'18px', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021', padding:'24px', marginBottom:'16px' }}>
-                <h3 style={{ fontSize:'16px', fontWeight:700, color:'#fff', marginBottom:'4px' }}>Upload Documents</h3>
-                <p style={{ fontSize:'12px', color:'rgba(255,255,255,0.35)', marginBottom:'20px' }}>
+              <div style={{ borderRadius: '18px', border: '1px solid rgba(255,255,255,0.08)', background: '#0d1021', padding: '24px', marginBottom: '16px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>Upload Documents</h3>
+                <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)', marginBottom: '20px' }}>
                   Milestone {currentMsNo} of {totalMilestones}
                   {currentMsTitle ? ` — ${currentMsTitle}` : ''}
                 </p>
@@ -522,35 +523,35 @@ Return ONLY valid JSON (no markdown):
                   onDragOver={e => e.preventDefault()}
                   onDrop={e => { e.preventDefault(); setDrag(false); Array.from(e.dataTransfer.files).forEach(handleFile); }}
                   style={{
-                    border:`2px dashed ${drag ? 'rgba(124,58,237,0.7)' : 'rgba(255,255,255,0.1)'}`,
-                    borderRadius:'14px', padding:'48px 24px', textAlign:'center',
-                    cursor:'pointer', marginBottom:'14px',
-                    background: drag ? 'rgba(124,58,237,0.06)' : 'transparent', transition:'all 0.2s',
+                    border: `2px dashed ${drag ? 'rgba(124,58,237,0.7)' : 'rgba(255,255,255,0.1)'}`,
+                    borderRadius: '14px', padding: '48px 24px', textAlign: 'center',
+                    cursor: 'pointer', marginBottom: '14px',
+                    background: drag ? 'rgba(124,58,237,0.06)' : 'transparent', transition: 'all 0.2s',
                   }}>
-                  <input ref={fileRef} type="file" accept="image/*,.pdf" multiple style={{ display:'none' }}
+                  <input ref={fileRef} type="file" accept="image/*,.pdf" multiple style={{ display: 'none' }}
                     onChange={e => Array.from(e.target.files).forEach(handleFile)} />
-                  <div style={{ fontSize:'32px', marginBottom:'12px' }}>📄</div>
-                  <div style={{ fontSize:'14px', fontWeight:600, color:'#fff', marginBottom:'4px' }}>Click or drag to upload</div>
-                  <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.35)' }}>PDF, JPG, PNG · AI will verify authenticity</div>
+                  <div style={{ fontSize: '32px', marginBottom: '12px' }}>📄</div>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: '#fff', marginBottom: '4px' }}>Click or drag to upload</div>
+                  <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)' }}>PDF, JPG, PNG · AI will verify authenticity</div>
                 </div>
 
                 {uploaded.length > 0 && (
-                  <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'16px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
                     {uploaded.map((f, i) => (
-                      <div key={i} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'10px 14px', borderRadius:'10px', border:'1px solid rgba(16,185,129,0.2)', background:'rgba(16,185,129,0.06)', fontSize:'12px' }}>
-                        <span style={{ fontSize:'18px' }}>{f.icon}</span>
-                        <span style={{ flex:1, color:'rgba(255,255,255,0.8)' }}>{f.name}</span>
-                        <span style={{ color:'rgba(255,255,255,0.3)' }}>{f.size}</span>
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', borderRadius: '10px', border: '1px solid rgba(16,185,129,0.2)', background: 'rgba(16,185,129,0.06)', fontSize: '12px' }}>
+                        <span style={{ fontSize: '18px' }}>{f.icon}</span>
+                        <span style={{ flex: 1, color: 'rgba(255,255,255,0.8)' }}>{f.name}</span>
+                        <span style={{ color: 'rgba(255,255,255,0.3)' }}>{f.size}</span>
                       </div>
                     ))}
                   </div>
                 )}
 
                 {uploading && (
-                  <div style={{ marginBottom:'14px', padding:'12px 16px', borderRadius:'10px', border:'1px solid rgba(124,58,237,0.3)', background:'rgba(124,58,237,0.08)' }}>
-                    <div style={{ fontSize:'12px', color:'#c4b5fd', marginBottom:'8px' }}>Uploading… {uploadPct}%</div>
-                    <div style={{ height:'5px', borderRadius:'5px', background:'rgba(255,255,255,0.08)', overflow:'hidden' }}>
-                      <div style={{ height:'100%', width:`${uploadPct}%`, background:'linear-gradient(90deg,#7c3aed,#0891b2)', transition:'width 0.2s', borderRadius:'5px' }} />
+                  <div style={{ marginBottom: '14px', padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(124,58,237,0.3)', background: 'rgba(124,58,237,0.08)' }}>
+                    <div style={{ fontSize: '12px', color: '#c4b5fd', marginBottom: '8px' }}>Uploading… {uploadPct}%</div>
+                    <div style={{ height: '5px', borderRadius: '5px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${uploadPct}%`, background: 'linear-gradient(90deg,#7c3aed,#0891b2)', transition: 'width 0.2s', borderRadius: '5px' }} />
                     </div>
                   </div>
                 )}
@@ -558,58 +559,58 @@ Return ONLY valid JSON (no markdown):
                 {uploaded.length >= 1 && !result && (
                   <button onClick={runVerification} disabled={verifying || uploading}
                     style={{
-                      width:'100%', padding:'14px', borderRadius:'12px', border:'none',
-                      background:'linear-gradient(135deg,#7c3aed,#0891b2)',
-                      color:'#fff', fontWeight:700, fontSize:'14px',
+                      width: '100%', padding: '14px', borderRadius: '12px', border: 'none',
+                      background: 'linear-gradient(135deg,#7c3aed,#0891b2)',
+                      color: '#fff', fontWeight: 700, fontSize: '14px',
                       cursor: verifying || uploading ? 'not-allowed' : 'pointer',
-                      display:'flex', alignItems:'center', justifyContent:'center', gap:'8px',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                       opacity: verifying || uploading ? 0.6 : 1,
                     }}>
                     {verifying
-                      ? <><span style={{ width:'16px', height:'16px', border:'2px solid rgba(255,255,255,0.3)', borderTopColor:'#fff', borderRadius:'50%', animation:'spin 0.8s linear infinite', display:'inline-block' }} />Analyzing with AI…</>
+                      ? <><span style={{ width: '16px', height: '16px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />Analyzing with AI…</>
                       : uploading ? 'Uploading files…'
-                      : '🤖 Upload & Run AI Verification'}
+                        : '🤖 Upload & Run AI Verification'}
                   </button>
                 )}
               </div>
 
               {result && (
-                <div style={{ borderRadius:'18px', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021', padding:'24px' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
-                    <div style={{ fontSize:'13px', fontWeight:600, color:'rgba(255,255,255,0.6)' }}>🤖 AI Confidence Score</div>
-                    <div style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'44px', fontWeight:800, color:scoreColor }}>{result.score}%</div>
+                <div style={{ borderRadius: '18px', border: '1px solid rgba(255,255,255,0.08)', background: '#0d1021', padding: '24px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>🤖 AI Confidence Score</div>
+                    <div style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: '44px', fontWeight: 800, color: scoreColor }}>{result.score}%</div>
                   </div>
-                  <div style={{ height:'6px', borderRadius:'6px', overflow:'hidden', background:'rgba(255,255,255,0.08)', marginBottom:'16px' }}>
-                    <div style={{ height:'100%', width:`${result.score}%`, borderRadius:'6px', background:scoreColor, transition:'width 1s ease' }} />
+                  <div style={{ height: '6px', borderRadius: '6px', overflow: 'hidden', background: 'rgba(255,255,255,0.08)', marginBottom: '16px' }}>
+                    <div style={{ height: '100%', width: `${result.score}%`, borderRadius: '6px', background: scoreColor, transition: 'width 1s ease' }} />
                   </div>
                   <div style={{
-                    padding:'12px 16px', borderRadius:'12px', marginBottom:'20px', fontSize:'13px', fontWeight:700,
-                    ...(s > 85  ? { border:'1px solid rgba(16,185,129,0.4)',  background:'rgba(16,185,129,0.08)',  color:'#6ee7b7' }
-                      : s >= 55 ? { border:'1px solid rgba(245,158,11,0.4)', background:'rgba(245,158,11,0.08)', color:'#fcd34d' }
-                      :           { border:'1px solid rgba(239,68,68,0.4)',  background:'rgba(239,68,68,0.08)',  color:'#fca5a5' }),
+                    padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', fontSize: '13px', fontWeight: 700,
+                    ...(s > 85 ? { border: '1px solid rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.08)', color: '#6ee7b7' }
+                      : s >= 55 ? { border: '1px solid rgba(245,158,11,0.4)', background: 'rgba(245,158,11,0.08)', color: '#fcd34d' }
+                        : { border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.08)', color: '#fca5a5' }),
                   }}>
-                    {s > 85  ? '✅ AUTO-APPROVED — Milestone funds released'
+                    {s > 85 ? '✅ AUTO-APPROVED — Milestone funds released'
                       : s >= 55 ? '🗳️ ADMIN REVIEW — Admin will approve or reject'
-                      : '❌ AUTO-REJECTED — Score too low'}
-                    <div style={{ fontSize:'12px', fontWeight:400, marginTop:'4px', opacity:0.8 }}>{result.summary}</div>
+                        : '❌ AUTO-REJECTED — Score too low'}
+                    <div style={{ fontSize: '12px', fontWeight: 400, marginTop: '4px', opacity: 0.8 }}>{result.summary}</div>
                   </div>
-                  <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:'rgba(255,255,255,0.3)', marginBottom:'12px' }}>Verification Checks</div>
-                  <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'16px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '12px' }}>Verification Checks</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
                     {result.checks.map((c, i) => (
-                      <div key={i} style={{ display:'flex', gap:'10px', fontSize:'12px', alignItems:'flex-start' }}>
-                        <span style={{ fontWeight:700, color:statusColor[c.status], marginTop:'1px', flexShrink:0 }}>{statusIcon[c.status]}</span>
+                      <div key={i} style={{ display: 'flex', gap: '10px', fontSize: '12px', alignItems: 'flex-start' }}>
+                        <span style={{ fontWeight: 700, color: statusColor[c.status], marginTop: '1px', flexShrink: 0 }}>{statusIcon[c.status]}</span>
                         <div>
-                          <span style={{ fontWeight:600, color:'rgba(255,255,255,0.7)' }}>{c.label}</span>
-                          <span style={{ color:'rgba(255,255,255,0.35)' }}> — {c.detail}</span>
+                          <span style={{ fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>{c.label}</span>
+                          <span style={{ color: 'rgba(255,255,255,0.35)' }}> — {c.detail}</span>
                         </div>
                       </div>
                     ))}
                   </div>
-                  <div style={{ padding:'12px 16px', borderRadius:'10px', border:'1px solid rgba(34,211,238,0.2)', background:'rgba(34,211,238,0.05)', fontSize:'12px', color:'#67e8f9' }}>
+                  <div style={{ padding: '12px 16px', borderRadius: '10px', border: '1px solid rgba(34,211,238,0.2)', background: 'rgba(34,211,238,0.05)', fontSize: '12px', color: '#67e8f9' }}>
                     📋 Proof saved to admin panel.
-                    {s > 85  && ' Milestone verified — next milestone is now active.'}
+                    {s > 85 && ' Milestone verified — next milestone is now active.'}
                     {s >= 55 && s <= 85 && ' Admin will review and release funds if approved.'}
-                    {s < 55  && ' Proof rejected — contact admin for guidance.'}
+                    {s < 55 && ' Proof rejected — contact admin for guidance.'}
                   </div>
                 </div>
               )}
