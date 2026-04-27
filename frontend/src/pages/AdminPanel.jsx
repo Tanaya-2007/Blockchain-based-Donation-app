@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, deleteDoc, doc, getDocs, orderBy, query, updateDoc, getDoc, addDoc, serverTimestamp, increment } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, orderBy, query, updateDoc, getDoc, addDoc, serverTimestamp, increment, writeBatch, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { releaseMilestoneFunds } from '../utils/blockchain';
 
@@ -109,11 +109,14 @@ function VerificationBreakdown({ aiVerification, regNumber, orgName }) {
     documentClassification, aiDecision, matchedFields,
     extractedTextSummary, reasoning, nameMatch, regMatch,
     redFlags, red_flags, aiSummary, riskScore, riskLevel, scoreBreakdown,
+    ai_provider
   } = aiVerification;
 
   const rs        = RISK_STYLE[riskLevel] || RISK_STYLE.HIGH;
   const allFlags  = redFlags || red_flags || [];
   const classInfo = DOC_CLASS_LABEL[documentClassification || 'unknown'] || DOC_CLASS_LABEL.unknown;
+  
+  const provider = ai_provider || 'Gemini API';
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
@@ -121,7 +124,12 @@ function VerificationBreakdown({ aiVerification, regNumber, orgName }) {
       {/* Risk hero */}
       <div style={{ padding:'18px', borderRadius:'14px', border:`1px solid ${rs.border}`, background:rs.bg, display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'12px' }}>
         <div>
-          <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:rs.color, marginBottom:'4px' }}>{rs.icon} {riskLevel} RISK</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:rs.color }}>{rs.icon} {riskLevel} RISK</div>
+            <div style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}>
+              ⚡ Powered by {provider}
+            </div>
+          </div>
           <div style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'32px', fontWeight:800, color:rs.color, lineHeight:1 }}>
             {riskScore}<span style={{ fontSize:'14px', fontWeight:400 }}>/100</span>
           </div>
@@ -874,10 +882,78 @@ function ProofsTab() {
   const rejectProof = async (proof) => {
     setActioning(proof.id);
     try {
-      await updateDoc(doc(db,'proofs',proof.id), { status:'rejected', reviewedAt:new Date() });
-      setProofs(p => p.map(x => x.id===proof.id ? {...x,status:'rejected'} : x));
-      show(`Milestone ${proof.milestoneNo} proof rejected`,'warning');
-    } catch(e) { show(e.message,'error'); }
+      // 1. Fetch Campaign Details
+      const campRef = doc(db, 'campaigns', proof.campaignId);
+      const campSnap = await getDoc(campRef);
+      if (!campSnap.exists()) throw new Error('Campaign not found');
+      
+      const camp = campSnap.data();
+      const totalDonated = camp.raisedAmount || 0;
+      const releasedFunds = camp.releasedFunds || 0;
+      const lockedFunds = Math.max(0, totalDonated - releasedFunds);
+
+      // 2. Begin Batched Refund Process
+      const batch = writeBatch(db);
+      
+      // Update Proof
+      batch.update(doc(db, 'proofs', proof.id), { status: 'rejected', reviewedAt: new Date() });
+      
+      // Mark Campaign as Rejected/Halted and reduce raised amount by refunded amount
+      batch.update(campRef, { 
+        status: 'halted_rejected',
+        raisedAmount: releasedFunds, // Effectively zeros out locked funds
+        refundedFunds: increment(lockedFunds)
+      });
+
+      // If there are locked funds, distribute refunds
+      if (lockedFunds > 0) {
+        const donationsSnap = await getDocs(query(collection(db, 'donations'), where('campaignId', '==', proof.campaignId)));
+        
+        donationsSnap.docs.forEach(dSnap => {
+          const donation = dSnap.data();
+          const amount = donation.amount || 0;
+          
+          if (amount > 0 && donation.status !== 'refunded') {
+            // Calculate proportional refund based on locked funds
+            const refundAmount = releasedFunds === 0 
+              ? amount // Case 1: Full Refund
+              : Math.floor(amount * (lockedFunds / totalDonated)); // Case 2: Partial Refund
+
+            if (refundAmount > 0) {
+              // Update Donation Status
+              const refundStatus = releasedFunds === 0 ? 'Full Refund' : 'Partial Refund';
+              batch.update(dSnap.ref, { 
+                status: 'refunded', 
+                refundStatus: refundStatus,
+                refundedAmount: refundAmount
+              });
+
+              // Add Ledger Entry
+              const ledgerRef = doc(collection(db, 'ledger'));
+              batch.set(ledgerRef, {
+                type: 'Refund',
+                reason: `Milestone ${proof.milestoneNo} Rejected`,
+                amount: refundAmount,
+                campaignId: proof.campaignId,
+                campaignTitle: camp.title || 'Unknown',
+                donorId: donation.donorId || 'anonymous',
+                donorName: donation.donorName || 'Anonymous',
+                timestamp: serverTimestamp(),
+                status: 'Refund Processed'
+              });
+            }
+          }
+        });
+      }
+
+      await batch.commit();
+
+      setProofs(p => p.map(x => x.id === proof.id ? { ...x, status: 'rejected' } : x));
+      show(`Milestone ${proof.milestoneNo} rejected. ${lockedFunds > 0 ? `₹${lockedFunds.toLocaleString('en-IN')} locked funds refunded.` : ''}`, 'warning');
+    } catch(e) { 
+      console.error(e);
+      show(e.message, 'error'); 
+    }
     setActioning(null);
   };
 

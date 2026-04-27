@@ -71,14 +71,14 @@ export default function DonorDashboard() {
   const totalReleased= donations.filter(d => d.status === 'released').reduce((s, d) => s + (d.amount || 0), 0);
 
   return (
-    <div style={{ padding: '40px 48px', maxWidth: '1000px', margin: '0 auto', minHeight: 'calc(100vh - 68px)' }}>
+    <div style={{ padding: '40px 5%', maxWidth: '1000px', margin: '0 auto', minHeight: 'calc(100vh - 68px)' }}>
 
       {/* ── Profile card ── */}
       <div style={{
         borderRadius: '24px', border: '1px solid rgba(255,255,255,0.08)',
-        background: 'linear-gradient(145deg, #11142b, #0a0c1a)', padding: '36px',
+        background: 'linear-gradient(145deg, #11142b, #0a0c1a)', padding: '36px 5%',
         display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '32px',
-        boxShadow: '0 12px 40px rgba(0,0,0,0.2)'
+        boxShadow: '0 12px 40px rgba(0,0,0,0.2)', flexWrap: 'wrap'
       }}>
         {user?.photoURL ? (
           <img src={user.photoURL} alt={user.displayName || 'avatar'} referrerPolicy="no-referrer"
@@ -128,7 +128,7 @@ export default function DonorDashboard() {
 
       {/* ── Donation history ── */}
       <div style={{ borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)', background: '#0a0c1a', overflow: 'hidden', marginBottom: '32px' }}>
-        <div style={{ padding: '24px 32px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '24px 5%', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
           <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '20px', fontWeight: 800, color: '#fff' }}>
             💳 Your Donation History
           </div>
@@ -154,7 +154,7 @@ export default function DonorDashboard() {
               const camp = campaigns[d.campaignId];
               const pct  = camp?.targetAmount ? Math.min(Math.round(((camp.raisedAmount || 0) / camp.targetAmount) * 100), 100) : 0;
               return (
-                <div key={d.id} style={{ padding: '20px 32px', borderBottom: '1px solid rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', gap: '24px', transition: 'background 0.2s' }}
+                <div key={d.id} style={{ padding: '20px 5%', borderBottom: '1px solid rgba(255,255,255,0.03)', display: 'flex', alignItems: 'center', gap: '24px', transition: 'background 0.2s', flexWrap: 'wrap' }}
                   onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
                   onMouseLeave={ev => ev.currentTarget.style.background = 'transparent'}>
                   <div style={{ flex: 1 }}>
@@ -179,10 +179,12 @@ export default function DonorDashboard() {
                       fontSize: '11px', fontWeight: 700, padding: '4px 12px', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.5px',
                       ...(d.status === 'locked'
                         ? { background: 'rgba(245,158,11,0.15)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.3)' }
+                        : d.status === 'refunded'
+                        ? { background: 'rgba(239,68,68,0.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)' }
                         : { background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.3)' }
                       ),
                     }}>
-                      {d.status === 'locked' ? '🔒 Locked' : '✓ Released'}
+                      {d.status === 'locked' ? '🔒 Locked' : d.status === 'refunded' ? `💸 ${d.refundStatus || 'Refunded'} (₹${d.refundedAmount||0})` : '✓ Released'}
                     </span>
                   </div>
                 </div>

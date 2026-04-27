@@ -89,8 +89,18 @@ function Field({ label, required, error, touched, hint, children }) {
 }
 
 const VALIDATORS = {
-  title:        v => !v.trim() ? 'Title is required' : v.trim().length < 5 ? 'At least 5 characters' : null,
-  description:  v => !v.trim() ? 'Description is required' : v.trim().length < 50 ? 'At least 50 characters required' : null,
+  title:        v => {
+    if (!v.trim()) return 'Title is required';
+    if (v.trim().length < 5) return 'At least 5 characters';
+    if (!/^[a-zA-Z0-9\s.,&'()-]+$/.test(v.trim())) return 'Title contains invalid special characters';
+    return null;
+  },
+  description:  v => {
+    if (!v.trim()) return 'Description is required';
+    if (v.trim().length < 50) return 'At least 50 characters required';
+    if (/(.{5,})\1{4,}/.test(v.trim())) return 'Please write a real description — avoid excessive repetition';
+    return null;
+  },
   targetAmount: v => { const n = Number(v); return (!v || isNaN(n) || n < 1000) ? 'Minimum target is ₹1,000' : null; },
   category:     v => !v ? 'Please select a category' : null,
   deadline: v => {

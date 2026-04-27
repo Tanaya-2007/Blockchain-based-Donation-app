@@ -6,6 +6,7 @@ const TYPE_STYLE = {
   donation: { background: 'rgba(124,58,237,0.15)', color: '#c4b5fd', border: '1px solid rgba(124,58,237,0.3)', icon: '💳' },
   release:  { background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.3)', icon: '✅' },
   proof:    { background: 'rgba(245,158,11,0.15)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.3)', icon: '📄' },
+  refund:   { background: 'rgba(239,68,68,0.15)',  color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)', icon: '💸' },
 };
 
 function fakeTxHash(seed) {
@@ -38,7 +39,7 @@ export default function Ledger() {
 
     let donEntries = [];
     let proofEntries = [];
-    let ledgerEntries = []; // For milestone releases
+    let ledgerEntries = []; // For milestone releases & refunds
 
     const unsubDon = onSnapshot(query(collection(db, 'donations'), orderBy('createdAt', 'desc')), (snap) => {
       donEntries = snap.docs.map(d => {
@@ -52,7 +53,7 @@ export default function Ledger() {
           time:    fmtDate(data.createdAt),
           ts:      data.createdAt?.seconds || 0,
           hash:    data.blockchainTxHash || fakeTxHash(d.id),
-          status:  'Locked'
+          status:  data.status === 'refunded' ? (data.refundStatus || 'Refunded') : (data.status === 'locked' ? 'Locked' : 'Released')
         };
       });
       mergeAndSet();
@@ -76,20 +77,22 @@ export default function Ledger() {
       mergeAndSet();
     });
 
-    const unsubLedger = onSnapshot(query(collection(db, 'ledger'), orderBy('createdAt', 'desc')), (snap) => {
+    const unsubLedger = onSnapshot(query(collection(db, 'ledger'), orderBy('timestamp', 'desc')), (snap) => {
       ledgerEntries = snap.docs.map(d => {
         const data = d.data();
         if (data.type === 'donation') return null; // We handle donations from the donations col
+        
+        const isRefund = data.type === 'Refund';
         return {
           id:      d.id,
-          type:    'release',
+          type:    isRefund ? 'refund' : 'release',
           camp:    data.campaignTitle || 'Unknown Campaign',
-          user:    'Smart Contract',
+          user:    isRefund ? (data.donorName || 'Donor') : 'Smart Contract',
           amt:     data.amount || 0,
-          time:    fmtDate(data.createdAt),
-          ts:      data.createdAt?.seconds || 0,
+          time:    fmtDate(data.timestamp || data.createdAt),
+          ts:      (data.timestamp?.seconds) || (data.createdAt?.seconds) || 0,
           hash:    data.txHash || fakeTxHash(d.id),
-          status:  'Released'
+          status:  data.status || (isRefund ? 'Refunded' : 'Released')
         };
       }).filter(Boolean);
       mergeAndSet();

@@ -62,7 +62,8 @@ export default function NgoCampaignsDashboard({ user }) {
 
       // Overall Campaign Status
       let status = 'Active';
-      if (completedMilestones >= totalMilestones) status = 'Completed';
+      if (c.status === 'halted_rejected') status = 'Refunded / Halted';
+      else if (completedMilestones >= totalMilestones) status = 'Completed';
       else if (proofStatus === 'pending_upload') status = 'Needs Proof';
       else if (proofStatus === 'under_review') status = 'Under Review';
       else if (locked >= nextMilestoneAmt) status = 'Ready for Release';
@@ -145,9 +146,9 @@ export default function NgoCampaignsDashboard({ user }) {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
                     <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#fff', margin: 0 }}>{c.title}</h3>
                     <span style={{ fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.5px', 
-                      background: c.status === 'Completed' ? 'rgba(16,185,129,0.15)' : c.status === 'Needs Proof' ? 'rgba(245,158,11,0.15)' : c.status === 'Under Review' ? 'rgba(124,58,237,0.15)' : 'rgba(34,211,238,0.15)',
-                      color: c.status === 'Completed' ? '#6ee7b7' : c.status === 'Needs Proof' ? '#fcd34d' : c.status === 'Under Review' ? '#c4b5fd' : '#67e8f9',
-                      border: `1px solid ${c.status === 'Completed' ? 'rgba(16,185,129,0.3)' : c.status === 'Needs Proof' ? 'rgba(245,158,11,0.3)' : c.status === 'Under Review' ? 'rgba(124,58,237,0.3)' : 'rgba(34,211,238,0.3)'}`
+                      background: c.status === 'Refunded / Halted' ? 'rgba(239,68,68,0.15)' : c.status === 'Completed' ? 'rgba(16,185,129,0.15)' : c.status === 'Needs Proof' ? 'rgba(245,158,11,0.15)' : c.status === 'Under Review' ? 'rgba(124,58,237,0.15)' : 'rgba(34,211,238,0.15)',
+                      color: c.status === 'Refunded / Halted' ? '#fca5a5' : c.status === 'Completed' ? '#6ee7b7' : c.status === 'Needs Proof' ? '#fcd34d' : c.status === 'Under Review' ? '#c4b5fd' : '#67e8f9',
+                      border: `1px solid ${c.status === 'Refunded / Halted' ? 'rgba(239,68,68,0.3)' : c.status === 'Completed' ? 'rgba(16,185,129,0.3)' : c.status === 'Needs Proof' ? 'rgba(245,158,11,0.3)' : c.status === 'Under Review' ? 'rgba(124,58,237,0.3)' : 'rgba(34,211,238,0.3)'}`
                     }}>
                       {c.status}
                     </span>

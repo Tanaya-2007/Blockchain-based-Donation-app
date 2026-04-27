@@ -85,7 +85,7 @@ const VALIDATORS = {
     if (!v.trim()) return 'Organisation name is required';
     if (v.trim().length < 3) return 'Must be at least 3 characters';
     if (v.trim().length > 80) return 'Must be under 80 characters';
-    if (!isValidName(v)) return 'Please enter a real organisation name — avoid repeated characters or gibberish';
+    if (!/^[a-zA-Z0-9\s.,&'()-]+$/.test(v.trim())) return 'Organisation name contains invalid special characters';
     return null;
   },
   orgType: v => !v ? 'Please select an organisation type' : null,
@@ -139,13 +139,13 @@ const VALIDATORS = {
     if (!v.trim()) return 'Mission description is required';
     if (v.trim().length < 50) return `At least 50 characters required (${v.trim().length}/50)`;
     if (v.trim().length > 1000) return 'Keep it under 1000 characters';
-    if (!isMeaningfulText(v, 6)) return 'Please write a real description of your mission — avoid random characters or repetition';
+    if (/(.{5,})\1{4,}/.test(v.trim())) return 'Please write a real description of your mission — avoid excessive repetition';
     return null;
   },
 
   contactName: v => {
     if (!v.trim()) return 'Contact person name is required';
-    if (!isValidName(v)) return 'Please enter a real person name';
+    if (v.trim().length < 2) return 'Please enter a real person name';
     if (!/^[a-zA-Z\s.'-]+$/.test(v.trim())) return 'Name should contain only letters';
     return null;
   },
@@ -153,8 +153,7 @@ const VALIDATORS = {
   contactPhone: v => {
     const d = v.replace(/\D/g, '');
     if (!d) return 'Phone number is required';
-    if (d.length !== 10) return 'Enter a valid 10-digit Indian mobile number';
-    if (!/^[6-9]/.test(d)) return 'Indian mobile numbers start with 6, 7, 8, or 9';
+    if (d.length !== 10) return 'Enter a valid 10-digit mobile number';
     return null;
   },
 };
@@ -168,7 +167,7 @@ function runFormatChecks(form) {
   checks.push({ label:'Phone number',        pass:/^[6-9]\d{9}$/.test(form.contactPhone.replace(/\D/g,'')), detail: form.contactPhone || 'Not provided' });
   checks.push({ label:'Website provided',    pass: !!form.website.trim(), detail: form.website || 'No website' });
   checks.push({ label:'Year established',    pass: !!form.yearEstablished && parseInt(form.yearEstablished) >= 1950, detail: form.yearEstablished ? `Est. ${form.yearEstablished}` : 'Not provided' });
-  checks.push({ label:'Description quality', pass: isMeaningfulText(form.description, 6), detail: form.description.length >= 50 ? 'Sufficient' : 'Too short' });
+  checks.push({ label:'Description quality', pass: form.description.length >= 50 && !/(.{5,})\1{4,}/.test(form.description), detail: form.description.length >= 50 ? 'Sufficient' : 'Too short' });
   const score = Math.round((checks.filter(c => c.pass).length / checks.length) * 100);
   return { checks, score };
 }
