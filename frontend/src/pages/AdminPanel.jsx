@@ -591,33 +591,34 @@ function NgoRequestsTab() {
       )}
 
       {/* Analytics cards */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:'10px', marginBottom:'22px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px', marginBottom: '32px' }}>
         {[
-          { label:'Total NGOs',   val:counts.all,         color:'#a78bfa' },
-          { label:'Pending',      val:counts.pending,     color:'#fcd34d' },
-          { label:'Approved',     val:counts.approved,    color:'#6ee7b7' },
-          { label:'Rejected',     val:counts.rejected,    color:'#fca5a5' },
-          { label:'AI Rejected',  val:counts.ai_rejected, color:'#f87171' },
+          { label: 'Total NGOs',   val: counts.all,         color: '#a78bfa', icon: '🏢' },
+          { label: 'Pending',      val: counts.pending,     color: '#fcd34d', icon: '⏳' },
+          { label: 'Approved',     val: counts.approved,    color: '#34d399', icon: '✅' },
+          { label: 'Rejected',     val: counts.rejected,    color: '#fca5a5', icon: '✕' },
+          { label: 'AI Rejected',  val: counts.ai_rejected, color: '#f87171', icon: '🤖' },
         ].map(s => (
-          <div key={s.label} style={{ borderRadius:'14px', border:'1px solid rgba(255,255,255,0.07)', background:'#0d1021', padding:'14px 16px' }}>
-            <div style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'24px', fontWeight:800, color:s.color, lineHeight:1, marginBottom:'4px' }}>{s.val}</div>
-            <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.3)' }}>{s.label}</div>
+          <div key={s.label} style={{ borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)', background: 'linear-gradient(145deg, #11142b, #0a0c1a)', padding: '24px', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
+            <div style={{ position: 'absolute', top: '-15px', right: '-15px', fontSize: '80px', opacity: 0.04 }}>{s.icon}</div>
+            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>{s.label}</div>
+            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '32px', fontWeight: 800, color: s.color }}>{s.val}</div>
           </div>
         ))}
       </div>
 
       {/* Tab bar */}
-      <div style={{ display:'flex', marginBottom:'18px', borderBottom:'1px solid rgba(255,255,255,0.07)', overflowX:'auto', gap:0 }}>
+      <div style={{ display: 'flex', marginBottom: '24px', borderBottom: '1px solid rgba(255,255,255,0.07)', overflowX: 'auto', gap: '8px', paddingBottom: '4px' }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => { setFilter(t.id); setPage(1); setSelected(new Set()); }}
-            style={{ padding:'10px 18px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:600, background:'transparent', whiteSpace:'nowrap', transition:'all 0.15s',
-              color: filter===t.id ? '#fff' : 'rgba(255,255,255,0.35)',
-              borderBottom: filter===t.id ? '2px solid #7c3aed' : '2px solid transparent',
-              marginBottom:'-1px',
+            style={{ padding: '10px 20px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 700, background: 'transparent', whiteSpace: 'nowrap', transition: 'all 0.2s',
+              color: filter === t.id ? '#fff' : 'rgba(255,255,255,0.4)',
+              borderBottom: filter === t.id ? `2px solid #f59e0b` : '2px solid transparent',
+              marginBottom: '-5px',
             }}>
             {t.label}
             {t.count > 0 && (
-              <span style={{ marginLeft:'6px', padding:'1px 7px', borderRadius:'999px', fontSize:'10px', fontWeight:700, background:filter===t.id?'rgba(124,58,237,0.3)':'rgba(255,255,255,0.07)', color:filter===t.id?'#c4b5fd':'rgba(255,255,255,0.3)' }}>
+              <span style={{ marginLeft: '8px', padding: '2px 8px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, background: filter === t.id ? 'rgba(245,158,11,0.2)' : 'rgba(255,255,255,0.07)', color: filter === t.id ? '#fcd34d' : 'rgba(255,255,255,0.4)' }}>
                 {t.count}
               </span>
             )}
@@ -627,59 +628,59 @@ function NgoRequestsTab() {
 
       {/* AI Rejected notice */}
       {filter === 'ai_rejected' && (
-        <div style={{ padding:'12px 16px', borderRadius:'12px', border:'1px solid rgba(239,68,68,0.25)', background:'rgba(239,68,68,0.06)', fontSize:'13px', color:'#fca5a5', marginBottom:'16px', lineHeight:1.6 }}>
-          🤖 These submissions were <strong>automatically rejected</strong> by AI (risk score &lt; 65). Admin can still inspect and manually override by approving after review.
+        <div style={{ padding: '16px 20px', borderRadius: '16px', border: '1px solid rgba(239,68,68,0.3)', background: 'linear-gradient(135deg, rgba(239,68,68,0.1), rgba(239,68,68,0.05))', fontSize: '14px', color: '#fca5a5', marginBottom: '24px', lineHeight: 1.6, boxShadow: '0 4px 16px rgba(239,68,68,0.1)' }}>
+          🤖 These submissions were <strong style={{ color: '#fff' }}>automatically rejected</strong> by AI (risk score &lt; 65). Admin can still inspect and manually override by approving after review.
         </div>
       )}
 
-      {/* Search + Sort + Refresh */}
-      <div style={{ display:'flex', gap:'10px', marginBottom:'14px', flexWrap:'wrap', alignItems:'center' }}>
-        <div style={{ position:'relative', flex:'1', minWidth:'200px' }}>
-          <span style={{ position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', fontSize:'13px', pointerEvents:'none', opacity:0.5 }}>🔍</span>
+      {/* Controls & Filters */}
+      <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', flexWrap: 'wrap', alignItems: 'center', background: 'linear-gradient(145deg, #11142b, #0a0c1a)', padding: '16px 20px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+        <div style={{ flex: 1, minWidth: '240px', position: 'relative' }}>
+          <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }}>🔍</span>
           <input
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search org name, applicant, email…"
-            style={{ width:'100%', padding:'9px 12px 9px 34px', borderRadius:'10px', background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', color:'#fff', fontSize:'13px', outline:'none', boxSizing:'border-box' }}
+            style={{ width: '100%', padding: '10px 16px 10px 38px', borderRadius: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
           />
         </div>
         <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-          style={{ padding:'9px 14px', borderRadius:'10px', background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)', color:'rgba(255,255,255,0.7)', fontSize:'13px', outline:'none', cursor:'pointer' }}>
-          <option value="newest"       style={{background:'#111827'}}>Newest first</option>
-          <option value="oldest"       style={{background:'#111827'}}>Oldest first</option>
-          <option value="highest_risk" style={{background:'#111827'}}>Highest risk</option>
+          style={{ padding: '10px 16px', borderRadius: '12px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)', fontSize: '13px', outline: 'none', cursor: 'pointer' }}>
+          <option value="newest"       style={{ background: '#111827' }}>Newest first</option>
+          <option value="oldest"       style={{ background: '#111827' }}>Oldest first</option>
+          <option value="highest_risk" style={{ background: '#111827' }}>Highest risk</option>
         </select>
-        <button onClick={load} style={{ padding:'9px 16px', borderRadius:'10px', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.04)', color:'rgba(255,255,255,0.6)', fontWeight:600, fontSize:'13px', cursor:'pointer' }}>↺ Refresh</button>
+        <button onClick={load} style={{ padding: '10px 16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontWeight: 600, fontSize: '13px', cursor: 'pointer', transition: 'all 0.2s' }}>↺ Refresh</button>
       </div>
 
       {/* Bulk actions bar */}
       {selected.size > 0 && (
-        <div style={{ display:'flex', alignItems:'center', gap:'10px', padding:'11px 16px', borderRadius:'12px', border:'1px solid rgba(124,58,237,0.35)', background:'rgba(124,58,237,0.08)', marginBottom:'14px', flexWrap:'wrap' }}>
-          <span style={{ fontSize:'13px', fontWeight:600, color:'#c4b5fd' }}>{selected.size} selected</span>
-          <button onClick={bulkApprove} style={{ padding:'6px 14px', borderRadius:'7px', background:'rgba(16,185,129,0.2)', color:'#6ee7b7', fontWeight:700, fontSize:'12px', cursor:'pointer', border:'1px solid rgba(16,185,129,0.35)' }}>✓ Approve All</button>
-          <button onClick={() => setConfirm({type:'bulk_reject'})} style={{ padding:'6px 14px', borderRadius:'7px', background:'rgba(239,68,68,0.15)', color:'#fca5a5', fontWeight:700, fontSize:'12px', cursor:'pointer', border:'1px solid rgba(239,68,68,0.3)' }}>✕ Reject All</button>
-          <button onClick={() => setConfirm({type:'bulk_delete'})} style={{ padding:'6px 14px', borderRadius:'7px', background:'rgba(127,29,29,0.4)', color:'#fca5a5', fontWeight:700, fontSize:'12px', cursor:'pointer', border:'1px solid rgba(239,68,68,0.25)' }}>🗑 Delete All</button>
-          <button onClick={() => setSelected(new Set())} style={{ marginLeft:'auto', padding:'6px 10px', borderRadius:'7px', border:'1px solid rgba(255,255,255,0.08)', background:'transparent', color:'rgba(255,255,255,0.35)', cursor:'pointer', fontSize:'12px' }}>Clear</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 20px', borderRadius: '16px', border: '1px solid rgba(124,58,237,0.4)', background: 'linear-gradient(135deg, rgba(124,58,237,0.1), rgba(124,58,237,0.05))', marginBottom: '24px', flexWrap: 'wrap', boxShadow: '0 4px 16px rgba(124,58,237,0.1)' }}>
+          <span style={{ fontSize: '14px', fontWeight: 700, color: '#c4b5fd' }}>{selected.size} selected</span>
+          <button onClick={bulkApprove} style={{ padding: '8px 16px', borderRadius: '8px', background: 'rgba(16,185,129,0.2)', color: '#6ee7b7', fontWeight: 700, fontSize: '13px', cursor: 'pointer', border: '1px solid rgba(16,185,129,0.4)', transition: 'all 0.2s' }}>✓ Approve All</button>
+          <button onClick={() => setConfirm({type:'bulk_reject'})} style={{ padding: '8px 16px', borderRadius: '8px', background: 'rgba(239,68,68,0.15)', color: '#fca5a5', fontWeight: 700, fontSize: '13px', cursor: 'pointer', border: '1px solid rgba(239,68,68,0.3)', transition: 'all 0.2s' }}>✕ Reject All</button>
+          <button onClick={() => setConfirm({type:'bulk_delete'})} style={{ padding: '8px 16px', borderRadius: '8px', background: 'rgba(127,29,29,0.4)', color: '#fca5a5', fontWeight: 700, fontSize: '13px', cursor: 'pointer', border: '1px solid rgba(239,68,68,0.25)', transition: 'all 0.2s' }}>🗑 Delete All</button>
+          <button onClick={() => setSelected(new Set())} style={{ marginLeft: 'auto', padding: '8px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '12px', transition: 'all 0.2s' }}>Clear</button>
         </div>
       )}
 
       {/* Table */}
-      <div style={{ borderRadius:'18px', border:'1px solid rgba(255,255,255,0.07)', background:'#0d1021', overflow:'hidden' }}>
+      <div style={{ borderRadius: '24px', border: '1px solid rgba(255,255,255,0.08)', background: '#0a0c1a', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
         {/* Header row */}
-        <div style={{ display:'grid', gridTemplateColumns:'36px 1fr 90px 90px 130px 110px', gap:'12px', padding:'11px 20px', borderBottom:'1px solid rgba(255,255,255,0.06)', alignItems:'center' }}>
-          <input type="checkbox" checked={selected.size===paginated.length&&paginated.length>0} onChange={toggleAll}
-            style={{ width:'15px', height:'15px', cursor:'pointer', accentColor:'#7c3aed' }} />
-          {['Organisation','Submitted','AI Score','Status','Actions'].map(h => (
-            <div key={h} style={{ fontSize:'10px', fontWeight:700, color:'rgba(255,255,255,0.22)', textTransform:'uppercase', letterSpacing:'1px' }}>{h}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '36px 1fr 90px 90px 130px 110px', gap: '16px', padding: '16px 24px', borderBottom: '1px solid rgba(255,255,255,0.08)', alignItems: 'center', background: 'rgba(255,255,255,0.02)' }}>
+          <input type="checkbox" checked={selected.size === paginated.length && paginated.length > 0} onChange={toggleAll}
+            style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#f59e0b' }} />
+          {['Organisation', 'Submitted', 'AI Score', 'Status', 'Actions'].map(h => (
+            <div key={h} style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.3)', textTransform: 'uppercase', letterSpacing: '1px' }}>{h}</div>
           ))}
         </div>
 
         {loading ? (
-          <div style={{ padding:'60px', textAlign:'center', color:'rgba(255,255,255,0.25)', fontSize:'14px' }}>Loading…</div>
+          <div style={{ padding: '80px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>Loading requests…</div>
         ) : paginated.length === 0 ? (
-          <div style={{ padding:'60px', textAlign:'center' }}>
-            <div style={{ fontSize:'36px', marginBottom:'12px' }}>🔍</div>
-            <div style={{ color:'rgba(255,255,255,0.3)', fontSize:'14px' }}>No organisations found.</div>
+          <div style={{ padding: '80px', textAlign: 'center' }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }}>🔍</div>
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '15px' }}>No organisations found.</div>
           </div>
         ) : paginated.map(req => {
           const rv          = req.aiVerification;
@@ -692,79 +693,79 @@ function NgoRequestsTab() {
             <div key={req.id}
               onClick={() => setDetail(req)}
               style={{
-                display:'grid', gridTemplateColumns:'36px 1fr 90px 90px 130px 110px', gap:'12px',
-                padding:'13px 20px', borderBottom:'1px solid rgba(255,255,255,0.04)',
-                alignItems:'center', cursor:'pointer', transition:'background 0.15s',
-                background: sel ? 'rgba(124,58,237,0.07)' : 'transparent',
+                display: 'grid', gridTemplateColumns: '36px 1fr 90px 90px 130px 110px', gap: '16px',
+                padding: '16px 24px', borderBottom: '1px solid rgba(255,255,255,0.03)',
+                alignItems: 'center', cursor: 'pointer', transition: 'background 0.2s',
+                background: sel ? 'rgba(245,158,11,0.05)' : 'transparent',
               }}
-              onMouseEnter={e => { if(!sel) e.currentTarget.style.background='rgba(255,255,255,0.025)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background=sel?'rgba(124,58,237,0.07)':'transparent'; }}
+              onMouseEnter={e => { if(!sel) e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = sel ? 'rgba(245,158,11,0.05)' : 'transparent'; }}
             >
               {/* Checkbox */}
               <div onClick={e => toggleSelect(req.id, e)}>
-                <input type="checkbox" checked={sel} readOnly style={{ width:'15px', height:'15px', cursor:'pointer', accentColor:'#7c3aed' }} />
+                <input type="checkbox" checked={sel} readOnly style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#f59e0b' }} />
               </div>
 
               {/* Org + applicant */}
-              <div style={{ display:'flex', alignItems:'center', gap:'10px', minWidth:0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: 0 }}>
                 {req.photoURL
-                  ? <img src={req.photoURL} alt="" referrerPolicy="no-referrer" style={{ width:'32px', height:'32px', borderRadius:'50%', objectFit:'cover', flexShrink:0 }} />
-                  : <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:'linear-gradient(135deg,#7c3aed,#0891b2)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'12px', fontWeight:800, color:'#fff', flexShrink:0 }}>{(req.name||req.email||'?')[0].toUpperCase()}</div>
+                  ? <img src={req.photoURL} alt="" referrerPolicy="no-referrer" style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: '1px solid rgba(255,255,255,0.1)' }} />
+                  : <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'linear-gradient(135deg,#7c3aed,#0891b2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 800, color: '#fff', flexShrink: 0, border: '1px solid rgba(255,255,255,0.1)' }}>{(req.name||req.email||'?')[0].toUpperCase()}</div>
                 }
-                <div style={{ minWidth:0 }}>
-                  <div style={{ fontSize:'13px', fontWeight:600, color:'#fff', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{req.orgName||'—'}</div>
-                  <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{req.name||req.email}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '4px' }}>{req.orgName||'—'}</div>
+                  <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.name||req.email}</div>
                 </div>
               </div>
 
               {/* Date */}
-              <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.35)' }}>
+              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>
                 {req.createdAt?.seconds ? new Date(req.createdAt.seconds*1000).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : '—'}
               </div>
 
               {/* AI Score */}
               <div>
                 {rv?.riskScore != null
-                  ? <span style={{ fontSize:'11px', fontWeight:700, padding:'3px 8px', borderRadius:'999px', whiteSpace:'nowrap', background:rs?.bg||'rgba(255,255,255,0.05)', color:rs?.color||'rgba(255,255,255,0.4)', border:`1px solid ${rs?.border||'rgba(255,255,255,0.1)'}` }}>
+                  ? <span style={{ fontSize: '12px', fontWeight: 700, padding: '4px 10px', borderRadius: '999px', whiteSpace: 'nowrap', background: rs?.bg||'rgba(255,255,255,0.05)', color: rs?.color||'rgba(255,255,255,0.4)', border: `1px solid ${rs?.border||'rgba(255,255,255,0.1)'}` }}>
                       {rs?.icon} {rv.riskScore}
                     </span>
-                  : <span style={{ fontSize:'11px', color:'rgba(255,255,255,0.2)' }}>—</span>
+                  : <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.2)' }}>—</span>
                 }
               </div>
 
               {/* Status */}
-              <div style={{ display:'flex', gap:'5px', alignItems:'center', flexWrap:'wrap' }}>
-                <span style={{ fontSize:'11px', fontWeight:700, padding:'3px 9px', borderRadius:'999px', whiteSpace:'nowrap',
-                  background:(STATUS_STYLE[req.status]||STATUS_STYLE.pending).bg,
-                  color:(STATUS_STYLE[req.status]||STATUS_STYLE.pending).color,
-                  border:(STATUS_STYLE[req.status]||STATUS_STYLE.pending).border,
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '999px', whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.5px',
+                  background: (STATUS_STYLE[req.status]||STATUS_STYLE.pending).bg,
+                  color: (STATUS_STYLE[req.status]||STATUS_STYLE.pending).color,
+                  border: (STATUS_STYLE[req.status]||STATUS_STYLE.pending).border,
                 }}>
                   {req.status||'pending'}
                 </span>
                 {aiRejected && (
-                  <span style={{ fontSize:'10px', fontWeight:700, padding:'2px 6px', borderRadius:'999px', background:'rgba(239,68,68,0.15)', color:'#fca5a5', border:'1px solid rgba(239,68,68,0.25)', whiteSpace:'nowrap' }}>AI ✕</span>
+                  <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '999px', background: 'rgba(239,68,68,0.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)', whiteSpace: 'nowrap' }}>AI ✕</span>
                 )}
               </div>
 
               {/* Quick actions */}
-              <div style={{ display:'flex', gap:'5px' }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', gap: '8px' }} onClick={e => e.stopPropagation()}>
                 {req.status==='pending' && <>
                   <button onClick={() => approve(req)} title="Approve"
-                    style={{ padding:'5px 9px', borderRadius:'7px', background:'rgba(16,185,129,0.2)', color:'#6ee7b7', fontWeight:700, fontSize:'11px', cursor:'pointer', border:'1px solid rgba(16,185,129,0.35)' }}>✓</button>
+                    style={{ padding: '6px 12px', borderRadius: '8px', background: 'rgba(16,185,129,0.2)', color: '#6ee7b7', fontWeight: 700, fontSize: '12px', cursor: 'pointer', border: '1px solid rgba(16,185,129,0.4)' }}>✓</button>
                   <button onClick={() => setConfirm({type:'reject',req})} title="Reject"
-                    style={{ padding:'5px 9px', borderRadius:'7px', background:'rgba(239,68,68,0.15)', color:'#fca5a5', fontWeight:700, fontSize:'11px', cursor:'pointer', border:'1px solid rgba(239,68,68,0.3)' }}>✕</button>
+                    style={{ padding: '6px 12px', borderRadius: '8px', background: 'rgba(239,68,68,0.15)', color: '#fca5a5', fontWeight: 700, fontSize: '12px', cursor: 'pointer', border: '1px solid rgba(239,68,68,0.3)' }}>✕</button>
                 </>}
                 {req.status==='approved' && (
                   <button onClick={() => setConfirm({type:'reject',req})} title="Revoke"
-                    style={{ padding:'5px 9px', borderRadius:'7px', background:'rgba(239,68,68,0.15)', color:'#fca5a5', fontWeight:700, fontSize:'11px', cursor:'pointer', border:'1px solid rgba(239,68,68,0.3)' }}>✕</button>
+                    style={{ padding: '6px 12px', borderRadius: '8px', background: 'rgba(239,68,68,0.15)', color: '#fca5a5', fontWeight: 700, fontSize: '12px', cursor: 'pointer', border: '1px solid rgba(239,68,68,0.3)' }}>✕</button>
                 )}
                 {req.status==='rejected' && (
                   <button onClick={() => approve(req)} title="Re-approve"
-                    style={{ padding:'5px 9px', borderRadius:'7px', background:'rgba(16,185,129,0.15)', color:'#6ee7b7', fontWeight:700, fontSize:'11px', cursor:'pointer', border:'1px solid rgba(16,185,129,0.3)' }}>↺</button>
+                    style={{ padding: '6px 12px', borderRadius: '8px', background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', fontWeight: 700, fontSize: '12px', cursor: 'pointer', border: '1px solid rgba(16,185,129,0.3)' }}>↺</button>
                 )}
                 {/* View Details */}
                 <button onClick={() => setDetail(req)} title="View Details"
-                  style={{ padding:'5px 9px', borderRadius:'7px', background:'rgba(124,58,237,0.15)', color:'#c4b5fd', fontWeight:700, fontSize:'11px', cursor:'pointer', border:'1px solid rgba(124,58,237,0.3)' }}>→</button>
+                  style={{ padding: '6px 12px', borderRadius: '8px', background: 'rgba(245,158,11,0.15)', color: '#fcd34d', fontWeight: 700, fontSize: '12px', cursor: 'pointer', border: '1px solid rgba(245,158,11,0.3)' }}>→</button>
               </div>
             </div>
           );
@@ -772,9 +773,9 @@ function NgoRequestsTab() {
 
         {/* Load More */}
         {hasMore && (
-          <div style={{ padding:'16px', textAlign:'center', borderTop:'1px solid rgba(255,255,255,0.05)' }}>
+          <div style={{ padding: '24px', textAlign: 'center', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
             <button onClick={() => setPage(p => p+1)}
-              style={{ padding:'10px 28px', borderRadius:'10px', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.04)', color:'rgba(255,255,255,0.6)', fontWeight:600, fontSize:'13px', cursor:'pointer' }}>
+              style={{ padding: '12px 32px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#fff', fontWeight: 700, fontSize: '14px', cursor: 'pointer', transition: 'background 0.2s' }}>
               Load More ({filtered.length - paginated.length} remaining)
             </button>
           </div>
@@ -887,75 +888,82 @@ function ProofsTab() {
     <div>
       <ToastContainer toasts={toasts} />
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'10px', marginBottom:'20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '32px' }}>
         {[
-          { label:'Total',    val:proofs.length,                                     color:'#a78bfa' },
-          { label:'Pending',  val:pending,                                            color:'#fcd34d' },
-          { label:'Approved', val:proofs.filter(p=>p.status==='approved').length,    color:'#6ee7b7' },
+          { label: 'Total Proofs',    val: proofs.length,                                     color: '#a78bfa', icon: '📄' },
+          { label: 'Pending Review',  val: pending,                                            color: '#fcd34d', icon: '⏳' },
+          { label: 'Approved', val: proofs.filter(p=>p.status==='approved').length,    color: '#34d399', icon: '✅' },
         ].map(s => (
-          <div key={s.label} style={{ borderRadius:'14px', border:'1px solid rgba(255,255,255,0.07)', background:'#0d1021', padding:'14px 18px' }}>
-            <div style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'24px', fontWeight:800, color:s.color, lineHeight:1, marginBottom:'4px' }}>{s.val}</div>
-            <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.3)' }}>{s.label}</div>
+          <div key={s.label} style={{ borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)', background: 'linear-gradient(145deg, #11142b, #0a0c1a)', padding: '24px', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
+            <div style={{ position: 'absolute', top: '-15px', right: '-15px', fontSize: '80px', opacity: 0.04 }}>{s.icon}</div>
+            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>{s.label}</div>
+            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '32px', fontWeight: 800, color: s.color }}>{s.val}</div>
           </div>
         ))}
       </div>
 
-      <div style={{ borderRadius:'18px', border:'1px solid rgba(255,255,255,0.07)', background:'#0d1021', overflow:'hidden' }}>
-        <div style={{ padding:'16px 20px', borderBottom:'1px solid rgba(255,255,255,0.06)', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'10px' }}>
-          <div style={{ fontWeight:700, color:'#fff', fontSize:'15px' }}>
+      <div style={{ borderRadius: '24px', border: '1px solid rgba(255,255,255,0.08)', background: '#0a0c1a', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding: '24px 32px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', background: 'rgba(255,255,255,0.02)' }}>
+          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '20px', fontWeight: 800, color: '#fff' }}>
             Milestone Proofs
-            {pending > 0 && <span style={{ marginLeft:'10px', padding:'2px 9px', borderRadius:'999px', fontSize:'11px', fontWeight:700, background:'rgba(245,158,11,0.2)', color:'#fcd34d', border:'1px solid rgba(245,158,11,0.35)' }}>{pending} pending</span>}
+            {pending > 0 && <span style={{ marginLeft: '12px', padding: '4px 12px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, background: 'rgba(245,158,11,0.2)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.35)', textTransform: 'uppercase', letterSpacing: '0.5px', verticalAlign: 'middle' }}>{pending} pending</span>}
           </div>
-          <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {['all','pending','approved','rejected'].map(f => (
               <button key={f} onClick={() => setFilter(f)}
-                style={{ padding:'5px 12px', borderRadius:'999px', cursor:'pointer', fontSize:'12px', fontWeight:600, border:'none', background:filter===f?'rgba(255,255,255,0.12)':'transparent', color:filter===f?'#fff':'rgba(255,255,255,0.35)' }}>
-                {f.charAt(0).toUpperCase()+f.slice(1)}
+                style={{ padding: '8px 16px', borderRadius: '999px', cursor: 'pointer', fontSize: '12px', fontWeight: 700, border: 'none', transition: 'all 0.2s', background: filter === f ? 'rgba(124,58,237,0.2)' : 'transparent', color: filter === f ? '#c4b5fd' : 'rgba(255,255,255,0.4)', textTransform: 'capitalize' }}>
+                {f}
               </button>
             ))}
-            <button onClick={load} style={{ padding:'6px 14px', borderRadius:'8px', cursor:'pointer', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.04)', color:'rgba(255,255,255,0.6)', fontWeight:600, fontSize:'12px' }}>↺</button>
+            <button onClick={load} style={{ padding: '8px 16px', borderRadius: '12px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)', fontWeight: 700, fontSize: '12px', transition: 'all 0.2s', marginLeft: '8px' }}>↺ Refresh</button>
           </div>
         </div>
 
         {loading ? (
-          <div style={{ padding:'60px', textAlign:'center', color:'rgba(255,255,255,0.25)', fontSize:'14px' }}>Loading…</div>
+          <div style={{ padding: '80px', textAlign: 'center', color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>Loading proofs…</div>
         ) : shown.length === 0 ? (
-          <div style={{ padding:'60px', textAlign:'center', color:'rgba(255,255,255,0.25)', fontSize:'14px' }}>No proofs found.</div>
+          <div style={{ padding: '80px', textAlign: 'center' }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px', opacity: 0.5 }}>📄</div>
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '15px' }}>No proofs found.</div>
+          </div>
         ) : shown.map(proof => (
           <div key={proof.id}>
             <div onClick={() => setExpanded(expanded===proof.id ? null : proof.id)}
-              style={{ display:'grid', gridTemplateColumns:'1fr auto auto auto', gap:'12px', padding:'14px 20px', cursor:'pointer', alignItems:'center', borderBottom:'1px solid rgba(255,255,255,0.04)', background:expanded===proof.id?'rgba(255,255,255,0.02)':'transparent', transition:'background 0.15s' }}>
-              <div style={{ minWidth:0 }}>
-                <div style={{ fontSize:'13px', fontWeight:600, color:'#fff', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{proof.campaignTitle||'—'}</div>
-                <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.3)' }}>{proof.ngoName} · Milestone {proof.milestoneNo}</div>
+              style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '20px', padding: '20px 32px', cursor: 'pointer', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.03)', background: expanded === proof.id ? 'rgba(255,255,255,0.02)' : 'transparent', transition: 'background 0.2s' }}
+              onMouseEnter={e => { if(expanded !== proof.id) e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = expanded === proof.id ? 'rgba(255,255,255,0.02)' : 'transparent'; }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: '15px', fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginBottom: '6px' }}>{proof.campaignTitle || '—'}</div>
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>{proof.ngoName} · <span style={{ color: '#22d3ee', fontWeight: 700 }}>Milestone {proof.milestoneNo}</span></div>
               </div>
               {typeof proof.aiScore === 'number' && (
-                <span style={{ fontSize:'11px', fontWeight:700, padding:'3px 8px', borderRadius:'999px', whiteSpace:'nowrap',
-                  ...(proof.aiScore>=65 ? {background:'rgba(245,158,11,0.15)',color:'#fcd34d',border:'1px solid rgba(245,158,11,0.3)'} : {background:'rgba(239,68,68,0.15)',color:'#fca5a5',border:'1px solid rgba(239,68,68,0.3)'}),
+                <span style={{ fontSize: '12px', fontWeight: 700, padding: '4px 10px', borderRadius: '999px', whiteSpace: 'nowrap',
+                  ...(proof.aiScore>=65 ? {background: 'rgba(245,158,11,0.15)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.3)'} : {background: 'rgba(239,68,68,0.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)'}),
                 }}>
-                  {proof.aiScore>=65?'🗳️':'❌'} {proof.aiScore}%
+                  {proof.aiScore>=65 ? '🗳️' : '❌'} {proof.aiScore}%
                 </span>
               )}
-              <span style={{ fontSize:'11px', fontWeight:700, padding:'4px 9px', borderRadius:'999px', whiteSpace:'nowrap',
-                background:(PROOF_STATUS_STYLE[proof.status]||PROOF_STATUS_STYLE.pending_admin_review).bg,
-                color:(PROOF_STATUS_STYLE[proof.status]||PROOF_STATUS_STYLE.pending_admin_review).color,
-                border:(PROOF_STATUS_STYLE[proof.status]||PROOF_STATUS_STYLE.pending_admin_review).border,
+              <span style={{ fontSize: '11px', fontWeight: 700, padding: '6px 14px', borderRadius: '999px', whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.5px',
+                background: (PROOF_STATUS_STYLE[proof.status]||PROOF_STATUS_STYLE.pending_admin_review).bg,
+                color: (PROOF_STATUS_STYLE[proof.status]||PROOF_STATUS_STYLE.pending_admin_review).color,
+                border: (PROOF_STATUS_STYLE[proof.status]||PROOF_STATUS_STYLE.pending_admin_review).border,
               }}>
-                {proof.status==='pending_admin_review'?'Pending':proof.status}
+                {proof.status === 'pending_admin_review' ? 'Pending' : proof.status}
               </span>
-              <div style={{ display:'flex', gap:'5px', flexShrink:0 }} onClick={e => e.stopPropagation()}>
-                {proof.status==='pending_admin_review' && <>
-                  <button onClick={() => approveProof(proof)} disabled={actioning===proof.id}
-                    style={{ padding:'6px 10px', borderRadius:'7px', background:'rgba(16,185,129,0.2)', color:'#6ee7b7', fontWeight:700, fontSize:'11px', cursor:'pointer', border:'1px solid rgba(16,185,129,0.35)' }}>✓ Approve</button>
-                  <button onClick={() => rejectProof(proof)} disabled={actioning===proof.id}
-                    style={{ padding:'6px 10px', borderRadius:'7px', background:'rgba(239,68,68,0.15)', color:'#fca5a5', fontWeight:700, fontSize:'11px', cursor:'pointer', border:'1px solid rgba(239,68,68,0.3)' }}>✕</button>
+              <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                {proof.status === 'pending_admin_review' && <>
+                  <button onClick={() => approveProof(proof)} disabled={actioning === proof.id}
+                    style={{ padding: '8px 16px', borderRadius: '8px', background: 'rgba(16,185,129,0.2)', color: '#6ee7b7', fontWeight: 700, fontSize: '12px', cursor: 'pointer', border: '1px solid rgba(16,185,129,0.4)', transition: 'all 0.2s' }}>✓ Approve</button>
+                  <button onClick={() => rejectProof(proof)} disabled={actioning === proof.id}
+                    style={{ padding: '8px 16px', borderRadius: '8px', background: 'rgba(239,68,68,0.15)', color: '#fca5a5', fontWeight: 700, fontSize: '12px', cursor: 'pointer', border: '1px solid rgba(239,68,68,0.3)', transition: 'all 0.2s' }}>✕ Reject</button>
                 </>}
               </div>
             </div>
             {expanded === proof.id && (
-              <div style={{ padding:'18px 20px 22px', borderBottom:'1px solid rgba(255,255,255,0.05)', background:'rgba(255,255,255,0.015)' }}>
+              <div style={{ padding: '32px', borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.2)' }}>
                 {(proof.aiVerification || proof.riskScore || proof.aiScore || proof.aiSummary) ? (
-                  <div style={{ marginBottom:'16px' }}>
+                  <div style={{ marginBottom: '24px' }}>
                     <VerificationBreakdown 
                       aiVerification={proof.aiVerification || proof} 
                       regNumber={proof.campaignId} 
@@ -964,21 +972,21 @@ function ProofsTab() {
                   </div>
                 ) : null}
                 {proof.fileUrls?.length > 0 && (
-                  <div style={{ marginBottom:'12px' }}>
-                    <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.25)', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'8px' }}>Documents</div>
-                    <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
+                  <div style={{ marginBottom: '20px' }}>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px', fontWeight: 700 }}>Attached Documents</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
                       {proof.fileUrls.map((url,i) => <DocLink key={i} url={url} label={`Document ${i+1}`} />)}
                     </div>
                   </div>
                 )}
-                <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.2)' }}>
-                  Submitted: {proof.uploadedAt?.seconds ? new Date(proof.uploadedAt.seconds*1000).toLocaleString('en-IN') : '—'}
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.3)', marginTop: '8px' }}>
+                  Submitted: {proof.uploadedAt?.seconds ? new Date(proof.uploadedAt.seconds*1000).toLocaleString('en-IN', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—'}
                 </div>
                 {proof.txHash && (
-                  <div style={{ marginTop:'12px', fontSize:'11px', color:'#a78bfa', background:'rgba(124,58,237,0.1)', padding:'10px', borderRadius:'8px', border:'1px solid rgba(124,58,237,0.2)' }}>
-                    🔒 <strong>Blockchain Tx:</strong> <span style={{fontFamily:'monospace'}}>{proof.txHash}</span>
+                  <div style={{ marginTop: '20px', fontSize: '13px', color: '#c4b5fd', background: 'rgba(124,58,237,0.1)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(124,58,237,0.3)' }}>
+                    🔒 <strong style={{ color: '#fff' }}>Blockchain Tx:</strong> <span style={{ fontFamily: 'monospace', opacity: 0.8, marginLeft: '8px' }}>{proof.txHash}</span>
                     {proof.txHash.startsWith('0x') && (
-                      <a href={`https://amoy.polygonscan.com/tx/${proof.txHash}`} target="_blank" rel="noreferrer" style={{ marginLeft:'8px', color:'#34d399', textDecoration:'none', fontWeight:'bold' }}>Explorer ↗</a>
+                      <a href={`https://amoy.polygonscan.com/tx/${proof.txHash}`} target="_blank" rel="noreferrer" style={{ marginLeft: '12px', color: '#34d399', textDecoration: 'none', fontWeight: 'bold', display: 'inline-block', padding: '4px 10px', background: 'rgba(52,211,153,0.1)', borderRadius: '6px', border: '1px solid rgba(52,211,153,0.2)' }}>Explorer ↗</a>
                     )}
                   </div>
                 )}
@@ -995,20 +1003,20 @@ function ProofsTab() {
 export default function AdminPanel() {
   const [activeTab, setActiveTab] = useState('ngos');
   return (
-    <div style={{ padding:'32px 24px', maxWidth:'1100px' }}>
-      <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'2px', textTransform:'uppercase', color:'#f59e0b', marginBottom:'6px' }}>Admin</div>
-      <h2 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'28px', fontWeight:800, color:'#fff', letterSpacing:'-0.5px', marginBottom:'4px' }}>Admin Dashboard</h2>
-      <p style={{ color:'rgba(255,255,255,0.35)', fontSize:'13px', marginBottom:'24px' }}>
+    <div style={{ padding: '40px 48px', maxWidth: '1200px', margin: '0 auto', minHeight: 'calc(100vh - 68px)' }}>
+      <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#f59e0b', marginBottom: '8px' }}>Admin Ecosystem</div>
+      <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '32px', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px', marginBottom: '6px' }}>Admin Dashboard</h2>
+      <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', marginBottom: '36px' }}>
         Manage NGO registrations, AI verification reports, milestone proofs, and fund releases.
       </p>
 
-      <div style={{ display:'flex', marginBottom:'28px', borderBottom:'1px solid rgba(255,255,255,0.07)' }}>
-        {[{ id:'ngos', label:'🏢 NGO Requests' }, { id:'proofs', label:'📄 Milestone Proofs' }].map(tab => (
+      <div style={{ display: 'flex', marginBottom: '32px', borderBottom: '1px solid rgba(255,255,255,0.07)', gap: '8px' }}>
+        {[{ id: 'ngos', label: '🏢 NGO Requests' }, { id: 'proofs', label: '📄 Milestone Proofs' }].map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            style={{ padding:'11px 22px', border:'none', cursor:'pointer', fontSize:'14px', fontWeight:600, background:'transparent', transition:'all 0.15s',
-              color: activeTab===tab.id ? '#fff' : 'rgba(255,255,255,0.3)',
-              borderBottom: activeTab===tab.id ? '2px solid #7c3aed' : '2px solid transparent',
-              marginBottom:'-1px',
+            style={{ padding: '12px 24px', border: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 700, background: 'transparent', transition: 'all 0.2s',
+              color: activeTab === tab.id ? '#fff' : 'rgba(255,255,255,0.4)',
+              borderBottom: activeTab === tab.id ? '2px solid #f59e0b' : '2px solid transparent',
+              marginBottom: '-1px',
             }}>
             {tab.label}
           </button>

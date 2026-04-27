@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { addDoc, collection, getDocs, limit, query, serverTimestamp, where } from 'firebase/firestore';
 import { useAuth } from '../auth/useAuth';
 import { db } from '../firebase';
+import NgoCampaignsDashboard from '../components/NgoCampaignsDashboard';
 
 /* ─── config ──────────────────────────────────────────── */
 const MAX_MB      = 5;
@@ -527,11 +528,6 @@ export default function NgoDashboard() {
           setStatus('approved');
           const key = `ngo_approved_seen_${user.uid}`;
           if (!localStorage.getItem(key)) { setShowPopup(true); localStorage.setItem(key,'1'); }
-          getDocs(query(collection(db,'campaigns'), where('ngoId','==',user.uid))).then(s => {
-            const list = s.docs.map(d => ({ id:d.id, ...d.data() }));
-            setCampaigns(list);
-            setTotalRaised(list.reduce((sum,c) => sum+(c.raisedAmount||0), 0));
-          });
         } else if (snap.empty) { setStatus('none'); }
         else {
           const items = snap.docs.map(d => ({ id:d.id, ...d.data() }));
@@ -669,54 +665,7 @@ export default function NgoDashboard() {
   if (status === 'approved') return (
     <>
       {showPopup && <ApprovalPopup onClose={() => setShowPopup(false)} />}
-      <div style={{ padding:'40px 48px', maxWidth:'900px' }}>
-        <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'2px', textTransform:'uppercase', color:'#10b981', marginBottom:'8px' }}>NGO Dashboard</div>
-        <h2 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'30px', fontWeight:800, color:'#fff', letterSpacing:'-0.5px', marginBottom:'6px' }}>
-          Welcome, {user?.displayName?.split(' ')[0]||'Organisation'}
-        </h2>
-        <p style={{ color:'rgba(255,255,255,0.4)', fontSize:'14px', marginBottom:'36px' }}>Manage campaigns, upload milestone proofs, and track fund releases.</p>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'16px', marginBottom:'28px' }}>
-          {[
-            { label:'Active campaigns', val:campaigns.filter(c=>c.status==='active').length.toString(), color:'#a78bfa' },
-            { label:'Total raised',     val:`₹${totalRaised.toLocaleString('en-IN')}`,                  color:'#22d3ee' },
-            { label:'Total donors',     val:campaigns.reduce((s,c)=>s+(c.donorCount||0),0).toString(),  color:'#34d399' },
-          ].map(s => (
-            <div key={s.label} style={{ borderRadius:'16px', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021', padding:'20px', textAlign:'center' }}>
-              <div style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'28px', fontWeight:800, color:s.color, marginBottom:'4px' }}>{s.val}</div>
-              <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.35)' }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-        {campaigns.length > 0 && (
-          <div style={{ marginBottom:'28px', borderRadius:'16px', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021', overflow:'hidden' }}>
-            <div style={{ padding:'16px 24px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:700, color:'#fff', fontSize:'14px' }}>My Campaigns</div>
-            {campaigns.map(c => {
-              const raised=c.raisedAmount||0, target=c.targetAmount||0;
-              const pct=target?Math.min(Math.round((raised/target)*100),100):0;
-              return (
-                <div key={c.id} style={{ padding:'16px 24px', borderBottom:'1px solid rgba(255,255,255,0.04)', display:'flex', alignItems:'center', gap:'16px' }}>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:'14px', fontWeight:600, color:'#fff', marginBottom:'6px' }}>{c.title}</div>
-                    <div style={{ height:'4px', borderRadius:'4px', background:'rgba(255,255,255,0.08)', overflow:'hidden', marginBottom:'4px' }}>
-                      <div style={{ height:'100%', width:`${pct}%`, background:'linear-gradient(90deg,#7c3aed,#0891b2)', borderRadius:'4px' }} />
-                    </div>
-                    <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.3)' }}>₹{Math.max(0,target-raised).toLocaleString('en-IN')} remaining of ₹{target.toLocaleString('en-IN')}</div>
-                  </div>
-                  <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontSize:'13px', fontWeight:700, color:'#22d3ee' }}>₹{raised.toLocaleString('en-IN')}</div>
-                    <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.3)' }}>{pct}% raised</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-          <Link to="/create-campaign" style={{ display:'inline-flex', alignItems:'center', gap:'8px', padding:'12px 24px', borderRadius:'12px', background:'linear-gradient(135deg,#10b981,#0891b2)', color:'#fff', fontWeight:700, fontSize:'14px', textDecoration:'none' }}>🚀 Create Campaign</Link>
-          <Link to="/proof" style={{ display:'inline-flex', alignItems:'center', gap:'8px', padding:'12px 24px', borderRadius:'12px', background:'linear-gradient(135deg,#7c3aed,#0891b2)', color:'#fff', fontWeight:700, fontSize:'14px', textDecoration:'none' }}>📄 Upload Milestone Proof</Link>
-          <Link to="/campaigns" style={{ display:'inline-flex', alignItems:'center', padding:'12px 24px', borderRadius:'12px', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.05)', color:'#fff', fontWeight:700, fontSize:'14px', textDecoration:'none' }}>Browse Campaigns</Link>
-        </div>
-      </div>
+      <NgoCampaignsDashboard user={user} />
     </>
   );
 
