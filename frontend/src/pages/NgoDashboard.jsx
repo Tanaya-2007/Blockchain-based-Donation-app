@@ -275,7 +275,7 @@ Return ONLY valid JSON, no markdown, no extra text:
 }`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('http://localhost:5000/api/ai/messages', {
       method:'POST',
       headers:{ 'Content-Type':'application/json' },
       body: JSON.stringify({

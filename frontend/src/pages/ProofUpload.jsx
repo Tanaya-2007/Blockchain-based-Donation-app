@@ -219,8 +219,12 @@ export default function ProofUpload({ onToast }) {
 
     if (status === 'approved') {
       const msIndex = currentMs - 1;
+      const updatedMilestones = normalizeMilestones(selCampaign.milestones).map((m, i) =>
+        i === msIndex ? { ...m, status: 'verified' } : m
+      );
+      
       await updateDoc(doc(db, 'campaigns', selCampaign.id), {
-        [`milestones.${msIndex}.status`]: 'verified',
+        milestones: updatedMilestones,
         currentMilestone: currentMs + 1,
       });
       const updateCamp = camp => {
@@ -279,7 +283,7 @@ Return ONLY valid JSON (no markdown):
         ? [{ type:'image', source:{ type:'base64', media_type:imgType, data:imgBase64 } }, { type:'text', text:prompt }]
         : prompt + '\n\nNo image — score 60, verdict DONOR_VOTE.';
 
-      const res  = await fetch('https://api.anthropic.com/v1/messages', {
+      const res  = await fetch('http://localhost:5000/api/ai/messages', {
         method:'POST', headers:{ 'Content-Type':'application/json' },
         body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:1000, messages:[{ role:'user', content }] }),
       });

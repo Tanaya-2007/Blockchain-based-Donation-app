@@ -3,4 +3,4 @@
 
 export const CONTRACT_ADDRESS = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512";
 export const DEPLOYED_NETWORK = "localhost";
-export const DEPLOYED_AT      = "2026-04-26T13:59:55.529Z";
+export const DEPLOYED_AT      = "2026-04-27T08:51:35.293Z";

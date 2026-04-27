@@ -830,8 +830,19 @@ function ProofsTab() {
         reviewedAt:new Date(),
         txHash: bchainTxId 
       });
+
+      // Safely rebuild array to avoid Firebase dot-notation array corruption
+      const rawMilestones = campData.milestones || [];
+      const milestonesArr = Array.isArray(rawMilestones) 
+        ? rawMilestones 
+        : Object.keys(rawMilestones).sort((a,b)=>Number(a)-Number(b)).map(k=>rawMilestones[k]);
+
+      const updatedMilestones = milestonesArr.map((m, i) =>
+        i === (proof.milestoneNo - 1) ? { ...m, status: 'verified' } : m
+      );
+
       await updateDoc(doc(db,'campaigns',proof.campaignId), {
-        [`milestones.${proof.milestoneNo-1}.status`]:'verified',
+        milestones: updatedMilestones,
         currentMilestone: proof.milestoneNo + 1,
         releasedFunds: increment(rawAmount),
       });
