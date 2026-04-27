@@ -806,12 +806,18 @@ function ProofsTab() {
   const approveProof = async (proof) => {
     setActioning(proof.id);
     try {
-      // 1. Fetch Campaign data to get amount
       const campDoc = await getDoc(doc(db, 'campaigns', proof.campaignId));
       if (!campDoc.exists()) throw new Error('Campaign not found');
       const campData = campDoc.data();
       const milestone = campData.milestones?.[proof.milestoneNo - 1] || {};
       const rawAmount = milestone.amount || (campData.targetAmount / (campData.milestones?.length || 1));
+      
+      const totalRaised = campData.raisedAmount || 0;
+      const currentlyReleased = campData.releasedFunds || 0;
+      
+      if (currentlyReleased + rawAmount > totalRaised) {
+        throw new Error(`Cannot release ₹${rawAmount.toLocaleString('en-IN')}. Only ₹${Math.max(0, totalRaised - currentlyReleased).toLocaleString('en-IN')} locked funds available.`);
+      }
 
       // 2. Blockchain call
       // For local testing, we fallback to a standard hardhat/test address if ngoWallet is missing
