@@ -3,6 +3,7 @@ const express    = require('express');
 const cors       = require('cors');
 const paymentRoutes = require('./payment');
 const verifyRoutes  = require('./routes/verify');
+const onchainRoutes = require('./routes/onchain');
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -13,6 +14,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 /* ── routes ── */
 app.use('/api/payment', paymentRoutes);
+app.use('/api/onchain', onchainRoutes);
 
 /* ── AI Verification Route (Gemini 2.5 Flash) ── */
 app.use('/api/ai', verifyRoutes);

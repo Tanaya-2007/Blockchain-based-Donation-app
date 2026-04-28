@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { collection, orderBy, query, onSnapshot } from 'firebase/firestore';
+import { collection, orderBy, query, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 
 const TYPE_STYLE = {
@@ -24,6 +24,20 @@ function fmtDate(ts) {
 
 function fmtAmt(n) { return n ? `₹${Number(n).toLocaleString('en-IN')}` : '—'; }
 
+function SkeletonTable() {
+  return (
+    <div style={{ padding: '24px' }}>
+      {[1, 2, 3, 4, 5, 6].map(i => (
+        <div key={i} style={{
+          height: '48px', marginBottom: '16px', borderRadius: '12px',
+          background: 'linear-gradient(90deg, #11142b 25%, #1a1e3d 50%, #11142b 75%)',
+          backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite'
+        }} />
+      ))}
+    </div>
+  );
+}
+
 export default function Ledger() {
   const [entries,  setEntries]  = useState([]);
   const [loading,  setLoading]  = useState(true);
@@ -35,13 +49,34 @@ export default function Ledger() {
   const rowsPerPage = 10;
 
   useEffect(() => {
+    let mounted = true;
     setLoading(true);
+
+    // Inject shimmer keyframes if not exists
+    if (!document.getElementById('shimmer-style')) {
+      const style = document.createElement('style');
+      style.id = 'shimmer-style';
+      style.innerHTML = `@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`;
+      document.head.appendChild(style);
+    }
 
     let donEntries = [];
     let proofEntries = [];
-    let ledgerEntries = []; // For milestone releases & refunds
+    let ledgerEntries = [];
 
-    const unsubDon = onSnapshot(query(collection(db, 'donations'), orderBy('createdAt', 'desc')), (snap) => {
+    const checkLoading = () => {
+      if (mounted) setLoading(false);
+    };
+
+    function mergeAndSet() {
+      if (!mounted) return;
+      const all = [...donEntries, ...proofEntries, ...ledgerEntries].sort((a, b) => b.ts - a.ts);
+      setEntries(all);
+      setLoading(false);
+    }
+
+    // Limit queries to avoid massive payloads which causes delays
+    const unsubDon = onSnapshot(query(collection(db, 'donations'), orderBy('createdAt', 'desc'), limit(150)), (snap) => {
       donEntries = snap.docs.map(d => {
         const data = d.data();
         return {
@@ -57,9 +92,9 @@ export default function Ledger() {
         };
       });
       mergeAndSet();
-    });
+    }, (err) => { console.error("Ledger Don Error:", err); checkLoading(); });
 
-    const unsubProof = onSnapshot(query(collection(db, 'proofs'), orderBy('uploadedAt', 'desc')), (snap) => {
+    const unsubProof = onSnapshot(query(collection(db, 'proofs'), orderBy('uploadedAt', 'desc'), limit(150)), (snap) => {
       proofEntries = snap.docs.map(d => {
         const data = d.data();
         return {
@@ -75,12 +110,12 @@ export default function Ledger() {
         };
       });
       mergeAndSet();
-    });
+    }, (err) => { console.error("Ledger Proof Error:", err); checkLoading(); });
 
-    const unsubLedger = onSnapshot(query(collection(db, 'ledger'), orderBy('timestamp', 'desc')), (snap) => {
+    const unsubLedger = onSnapshot(query(collection(db, 'ledger'), orderBy('timestamp', 'desc'), limit(150)), (snap) => {
       ledgerEntries = snap.docs.map(d => {
         const data = d.data();
-        if (data.type === 'donation') return null; // We handle donations from the donations col
+        if (data.type === 'donation') return null;
         
         const isRefund = data.type === 'Refund';
         return {
@@ -96,18 +131,17 @@ export default function Ledger() {
         };
       }).filter(Boolean);
       mergeAndSet();
-    });
+    }, (err) => { console.error("Ledger Auth Error:", err); checkLoading(); });
 
-    function mergeAndSet() {
-      const all = [...donEntries, ...proofEntries, ...ledgerEntries].sort((a, b) => b.ts - a.ts);
-      setEntries(all);
-      setLoading(false);
-    }
+    // Failsafe timeout
+    const failsafe = setTimeout(checkLoading, 2500);
 
     return () => {
+      mounted = false;
       unsubDon();
       unsubProof();
       unsubLedger();
+      clearTimeout(failsafe);
     };
   }, []);
 
@@ -201,7 +235,7 @@ export default function Ledger() {
       <div style={{ borderRadius: '20px', border: '1px solid rgba(255,255,255,0.06)', background: '#0a0c1a', overflow: 'hidden' }}>
         
         {loading ? (
-          <div style={{ padding: '80px', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '14px' }}>Syncing blockchain nodes...</div>
+          <SkeletonTable />
         ) : shown.length === 0 ? (
           <div style={{ padding: '80px', textAlign: 'center' }}>
             <div style={{ fontSize: '40px', marginBottom: '16px', opacity: 0.5 }}>📭</div>
@@ -277,8 +311,6 @@ export default function Ledger() {
           </div>
         )}
       </div>
-
-      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
     </div>
   );
 }
