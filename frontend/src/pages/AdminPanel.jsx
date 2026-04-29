@@ -145,7 +145,7 @@ function VerificationBreakdown({ aiVerification, regNumber, orgName }) {
         )}
       </div>
 
-      {/* Classification */}
+      {/* Classification
       <div style={{ padding:'14px 16px', borderRadius:'12px', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.04)' }}>
         <div style={{ fontSize:'10px', fontWeight:700, color:'rgba(255,255,255,0.35)', letterSpacing:'1px', textTransform:'uppercase', marginBottom:'8px' }}>🔍 Document Classification</div>
         <div style={{ fontSize:'14px', fontWeight:700, color:classInfo.color, marginBottom:'6px' }}>{classInfo.label}</div>
@@ -159,7 +159,7 @@ function VerificationBreakdown({ aiVerification, regNumber, orgName }) {
             <strong style={{ color:'rgba(255,255,255,0.5)' }}>Extracted text:</strong> {extractedTextSummary}
           </div>
         )}
-      </div>
+      </div> */}
 
       {/* Field matches */}
       {matchedFields && Object.keys(matchedFields).length > 0 && (
@@ -181,7 +181,7 @@ function VerificationBreakdown({ aiVerification, regNumber, orgName }) {
       )}
 
       {/* AI extracted */}
-      {aiExtracted && (
+      {/* {aiExtracted && (
         <div style={{ borderRadius:'12px', border:'1px solid rgba(124,58,237,0.15)', background:'rgba(124,58,237,0.03)', padding:'14px' }}>
           <div style={{ fontSize:'10px', fontWeight:700, color:'#c4b5fd', letterSpacing:'1px', textTransform:'uppercase', marginBottom:'10px' }}>🤖 AI Extracted vs Declared</div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:'10px', marginBottom:'8px' }}>
@@ -210,7 +210,7 @@ function VerificationBreakdown({ aiVerification, regNumber, orgName }) {
             </div>
           )}
         </div>
-      )}
+      )} */}
 
       {/* Format checks */}
       {formatChecks?.length > 0 && (

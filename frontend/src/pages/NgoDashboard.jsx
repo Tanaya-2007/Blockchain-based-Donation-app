@@ -190,7 +190,7 @@ async function verifyOrgWithAI(form, imgBase64, imgType) {
   if (!imgBase64) {
     return {
       document_classification: 'no_image', confidence_score: 0, decision: 'reject',
-      matched_fields: { organization_name: false, registration_number: false, location: false, purpose: false },
+      matched_fields: { organization_name: false, registration_number: false, location: false, pan: false, website: false },
       extracted_text_summary: 'No image — PDF or missing file.',
       red_flags: ['Registration certificate uploaded as PDF — AI requires JPG/PNG image', 'Upload a clear photo of your registration certificate as JPG or PNG'],
       reasoning: 'No image available for analysis. Score 0. Auto-rejected.',
@@ -202,76 +202,82 @@ async function verifyOrgWithAI(form, imgBase64, imgType) {
 
   const prompt = `You are a STRICT NGO document verification engine for TransparentFund, an Indian donation platform.
 
-YOUR MANDATE: Protect donors from fraud. Reject anything that is not a genuine, readable Indian NGO/Trust/Society/Section-8 registration certificate. Do NOT be generous.
+YOUR MANDATE: Protect donors from fraud. Reject anything that is not a genuine, readable Indian NGO/Trust/Society/Section-8 registration certificate. You must ACTIVELY HUNT for AI-generated fakes, photoshopped templates, and synthetic documents.
 
 DECLARED REGISTRATION FORM:
 - Organisation Name: "${form.orgName}"
 - Registration Number: "${form.regNumber}"
 - PAN: "${form.panNumber}"
+- Website: "${form.website}"
 - Type: "${form.orgType}"
-- City: "${form.city}", State: "${form.state}"
+- Address/City: "${form.city}", State: "${form.state}"
 - Year Established: "${form.yearEstablished || 'not provided'}"
-- Mission: "${form.description.slice(0, 200)}"
 
 EXPECTED DOCUMENT: Indian NGO registration certificate (Society Reg. Act, Trust deed, Section-8 company cert, or equivalent)
 
 ═══════════════════════════════════════════
 CLASSIFICATION — PICK EXACTLY ONE:
 ═══════════════════════════════════════════
-correct_document   — IS a genuine registration/incorporation certificate for an Indian NGO/Trust/Society
-wrong_document     — a real document but NOT a registration certificate (PAN card, bank statement, Aadhaar, invoice, 80G cert)
-unrelated_image    — a photo, product image, random picture, nature shot, person photo, not a document
-code_image         — screenshot of code, IDE, terminal, GitHub, programming content
-screenshot         — screenshot of a website, app UI, phone screen, digital interface
-blank              — blank, all-white, all-black, corrupted, or completely unreadable
+real_document_scan       — Authentic scan of a genuine document
+real_photo_document      — Authentic physical photo of a genuine document
+ai_generated_document    — Synthetic/AI-generated document
+photoshopped_document    — Digitally manipulated or forged
+template_fake_document   — Stock template filled with fake data
+random_image             — Unrelated photo, product, nature, etc.
+code_screenshot          — Code, terminal, or IDE
+blank                    — Blank, corrupted, or completely unreadable
 
 ═══════════════════════════════════════════
-SCORING — START FROM 100, DEDUCT:
+DETECTION CHECKS & RED FLAGS (HUNT FOR THESE):
 ═══════════════════════════════════════════
-wrong_document:   -80 (max score 20)
-unrelated_image:  -95 (max score 5)
-code_image:       -95 (max score 5)
-screenshot:       -90 (max score 10)
-blank:            -100 (score = 0)
-Unreadable text:  -40
-Name mismatch:    -25
-Reg# mismatch:    -35
-Suspicious edits (pasted text, mixed fonts): -40
-AI-generated artifacts: -45
-No official seal or authority: -30
-Date is impossible: -20
+- Unnatural text edges or floating text
+- Inconsistent fonts or kerning anomalies
+- Fake seals/logos (lack of detail, weird shapes)
+- Too-clean synthetic layout (no paper texture, no natural wear)
+- Repeating artifacts or AI texture patterns in background
+- Misaligned spacing or hallucinated text/gibberish
+- Watermark anomalies
 
-HARD CAPS (enforce these regardless of other factors):
-  code_image / unrelated_image: confidence_score MUST be ≤ 5
-  screenshot: confidence_score MUST be ≤ 10
-  wrong_document: confidence_score MUST be ≤ 20
-  blank: confidence_score = 0
-  correct_document with good match: score 70-92
+═══════════════════════════════════════════
+SCORING RULES (START AT 100):
+═══════════════════════════════════════════
+- Compare extracted fields (Org Name, Address, Registration No, PAN, Website) with the declared form.
+- If ANY detection check fails (suspicious image), the score MUST stay low, EVEN IF text perfectly matches the form.
+
+HARD CAPS (You CANNOT exceed these scores for these classes):
+  ai_generated_document:    max 20
+  photoshopped_document:    max 20
+  template_fake_document:   max 25
+  random_image:             max 10
+  code_screenshot:          max 5
+  blank:                    score 0
+  real_document_scan/photo with mismatched fields: max 40
 
 Return ONLY valid JSON, no markdown, no extra text:
 {
-  "document_classification": "<correct_document|wrong_document|unrelated_image|code_image|screenshot|blank>",
+  "document_classification": "<real_document_scan|real_photo_document|ai_generated_document|photoshopped_document|template_fake_document|random_image|code_screenshot|blank>",
   "confidence_score": <integer 0-100>,
   "decision": "<reject|manual_review>",
   "matched_fields": {
     "organization_name": <true|false|null>,
     "registration_number": <true|false|null>,
     "location": <true|false|null>,
-    "purpose": <true|false|null>
+    "pan": <true|false|null>,
+    "website": <true|false|null>
   },
-  "extracted_text_summary": "<key text found, or reason why nothing was extracted>",
-  "red_flags": ["<specific red flag>"],
-  "reasoning": "<2-3 sentences: what you see, why you classified it this way, and why this score>",
-  "extractedOrgName": "<org name in document or null>",
-  "extractedRegNumber": "<reg number in document or null>",
+  "extracted_text_summary": "<key text found>",
+  "red_flags": ["<specific red flag found>"],
+  "reasoning": "<Why classified this way, citing specific visual anomalies if any>",
+  "extractedOrgName": "<org name or null>",
+  "extractedRegNumber": "<reg number or null>",
   "extractedAuthority": "<issuing body or null>",
-  "extractedDate": "<registration date or null>",
+  "extractedDate": "<date or null>",
   "nameMatch": <true|false|null>,
   "regNumberMatch": <true|false|null>,
   "documentAuthenticityScore": <same value as confidence_score>,
   "documentType": "<human-readable document type>",
   "redFlags": ["<same as red_flags array>"],
-  "summary": "<one sentence version of reasoning>"
+  "summary": "<one sentence reasoning>"
 }`;
 
   try {
@@ -294,7 +300,14 @@ Return ONLY valid JSON, no markdown, no extra text:
     const parsed = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]);
 
     // Hard-enforce score caps in JS — model cannot override these
-    const caps = { code_image: 5, unrelated_image: 5, screenshot: 10, wrong_document: 20, blank: 0 };
+    const caps = { 
+      ai_generated_document: 20, 
+      photoshopped_document: 20, 
+      template_fake_document: 25, 
+      random_image: 10, 
+      code_screenshot: 5, 
+      blank: 0 
+    };
     const cls = parsed.document_classification || '';
     if (caps[cls] !== undefined) {
       parsed.confidence_score = Math.min(parsed.confidence_score ?? 0, caps[cls]);
@@ -307,7 +320,7 @@ Return ONLY valid JSON, no markdown, no extra text:
   } catch {
     return {
       document_classification: 'api_error', confidence_score: 0, decision: 'reject',
-      matched_fields: { organization_name: null, registration_number: null, location: null, purpose: null },
+      matched_fields: { organization_name: null, registration_number: null, location: null, pan: null, website: null },
       extracted_text_summary: 'AI service unavailable.',
       red_flags: ['AI verification service error — admin must manually verify'],
       reasoning: 'AI verification failed. Score 0. Admin must manually verify all documents.',
@@ -548,6 +561,18 @@ export default function NgoDashboard() {
     })();
   }, [user, role]);
 
+  /* ── helper: sanitize for firestore ── */
+  const removeUndefinedDeep = (obj) => {
+    if (obj === undefined) return null;
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(removeUndefinedDeep);
+    const result = {};
+    for (const [key, val] of Object.entries(obj)) {
+      result[key] = val === undefined ? null : removeUndefinedDeep(val);
+    }
+    return result;
+  };
+
   /* ── submit ── */
   const handleSubmit = async () => {
     const allKeys = Object.keys(VALIDATORS);
@@ -620,38 +645,42 @@ export default function NgoDashboard() {
     }
 
     try {
-      await addDoc(collection(db, 'ngoRequests'), {
-        uid: user.uid, email: user.email || '', name: user.displayName || '', photoURL: user.photoURL || '',
+      const payload = {
+        uid: user?.uid || '', email: user?.email || '', name: user?.displayName || '', photoURL: user?.photoURL || '',
         status: finalStatus,
         ...form,
-        documents: urls,
+        documents: urls || {},
         aiVerification: {
-          formatChecks: formatResult.checks,
-          formatScore: formatResult.score,
+          formatChecks: formatResult?.checks || [],
+          formatScore: formatResult?.score || 0,
           aiExtracted: {
-            orgName: aiResult.extractedOrgName,
-            regNumber: aiResult.extractedRegNumber,
-            authority: aiResult.extractedAuthority,
-            registeredOn: aiResult.extractedDate,
-            documentType: aiResult.document_classification || aiResult.documentType,
+            orgName: aiResult?.extractedOrgName || "",
+            regNumber: aiResult?.extractedRegNumber || "",
+            authority: aiResult?.extractedAuthority || "",
+            registeredOn: aiResult?.extractedDate || "",
+            documentType: aiResult?.document_classification || aiResult?.documentType || "",
           },
-          aiScore: aiResult.confidence_score ?? aiResult.documentAuthenticityScore ?? 0,
-          documentClassification: aiResult.document_classification || 'unknown',
-          aiDecision: aiResult.decision || 'reject',
-          matchedFields: aiResult.matched_fields || {},
-          extractedTextSummary: aiResult.extracted_text_summary || '',
-          reasoning: aiResult.reasoning || aiResult.summary || '',
-          nameMatch: aiResult.nameMatch ?? aiResult.matched_fields?.organization_name ?? null,
-          regMatch: aiResult.regNumberMatch ?? aiResult.matched_fields?.registration_number ?? null,
-          redFlags: aiResult.red_flags || aiResult.redFlags || [],
-          aiSummary: aiResult.reasoning || aiResult.summary || '',
-          riskScore: riskScore.total,
-          riskLevel: riskScore.level,
-          scoreBreakdown: riskScore.breakdown,
+          aiScore: aiResult?.confidence_score ?? aiResult?.documentAuthenticityScore ?? 0,
+          documentClassification: aiResult?.document_classification || 'unknown',
+          aiDecision: aiResult?.decision || 'reject',
+          matchedFields: aiResult?.matched_fields || {},
+          extractedTextSummary: aiResult?.extracted_text_summary || '',
+          reasoning: aiResult?.reasoning || aiResult?.summary || '',
+          nameMatch: aiResult?.nameMatch ?? aiResult?.matched_fields?.organization_name ?? null,
+          regMatch: aiResult?.regNumberMatch ?? aiResult?.matched_fields?.registration_number ?? null,
+          redFlags: aiResult?.red_flags || aiResult?.redFlags || [],
+          aiSummary: aiResult?.reasoning || aiResult?.summary || '',
+          riskScore: riskScore?.total || 0,
+          riskLevel: riskScore?.level || 'HIGH',
+          scoreBreakdown: riskScore?.breakdown || {},
           verifiedAt: new Date().toISOString(),
         },
         createdAt: serverTimestamp(),
-      });
+      };
+
+      const sanitizedPayload = removeUndefinedDeep(payload);
+
+      await addDoc(collection(db, 'ngoRequests'), sanitizedPayload);
       setStatus(finalStatus);
     } catch (e) {
       alert('Submission failed: ' + e.message);

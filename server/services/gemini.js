@@ -1,56 +1,37 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-async function askGemini(prompt, base64Image = null, mimeType = null) {
+async function askGeminiDirect(prompt, base64Image = null, mimeType = null) {
   const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-  const claudeKey = process.env.CLAUDE_API_KEY || process.env.VITE_CLAUDE_API_KEY;
+  if (!geminiKey) throw new Error('GEMINI_API_KEY missing');
 
-  if (!geminiKey) {
-    console.warn('[AI] GEMINI_API_KEY missing. Falling back to Claude immediately.');
-    return await askClaudeFallback(prompt, base64Image, mimeType, claudeKey);
-  }
+  const genAI = new GoogleGenerativeAI(geminiKey);
+  const model = genAI.getGenerativeModel({ 
+    model: 'gemini-2.5-flash',
+    generationConfig: { responseMimeType: "application/json" }
+  });
 
-  console.log('[AI] Request started for Gemini 2.5 Flash');
-
-  try {
-    const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ 
-      model: 'gemini-2.5-flash',
-      generationConfig: { responseMimeType: "application/json" }
+  const parts = [];
+  if (prompt) parts.push(prompt);
+  if (base64Image && mimeType) {
+    parts.push({
+      inlineData: { data: base64Image, mimeType: mimeType }
     });
-
-    const parts = [];
-    if (prompt) parts.push(prompt);
-    if (base64Image && mimeType) {
-      parts.push({
-        inlineData: { data: base64Image, mimeType: mimeType }
-      });
-    }
-
-    const result = await model.generateContent(parts);
-    const textContent = result.response.text();
-    
-    if (!textContent) throw new Error('Malformed response from Gemini API');
-    
-    // Inject provider info
-    try {
-      const parsed = JSON.parse(textContent);
-      parsed.ai_provider = 'Gemini API';
-      console.log('[AI] Gemini Request success');
-      return JSON.stringify(parsed);
-    } catch(e) {
-      return textContent;
-    }
-  } catch (error) {
-    console.error('[AI] Gemini failed:', error.message);
-    return await askClaudeFallback(prompt, base64Image, mimeType, claudeKey);
   }
+
+  const result = await model.generateContent(parts);
+  const textContent = result.response.text();
+  
+  if (!textContent) throw new Error('Malformed response from Gemini API');
+  
+  const jsonMatch = textContent.match(/\{[\s\S]*\}/);
+  const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : textContent);
+  parsed.ai_provider = 'Gemini API';
+  return parsed;
 }
 
-async function askClaudeFallback(prompt, base64Image, mimeType, claudeKey) {
-  if (!claudeKey) {
-    throw new Error('Both Gemini and Claude API keys are missing or failed.');
-  }
-  console.log('[AI] Attempting Claude Fallback...');
+async function askClaudeDirect(prompt, base64Image, mimeType) {
+  const claudeKey = process.env.CLAUDE_API_KEY || process.env.VITE_CLAUDE_API_KEY;
+  if (!claudeKey) throw new Error('CLAUDE_API_KEY missing');
   
   const content = [];
   if (base64Image && mimeType) {
@@ -78,24 +59,16 @@ async function askClaudeFallback(prompt, base64Image, mimeType, claudeKey) {
 
   if (!response.ok) {
     const err = await response.text();
-    throw new Error(`Claude fallback failed: ${err}`);
+    throw new Error(`Claude API failed: ${err}`);
   }
 
   const data = await response.json();
   let text = data.content[0].text;
   
-  // Extract JSON if wrapped in markdown
   const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (jsonMatch) text = jsonMatch[0];
-
-  try {
-    const parsed = JSON.parse(text);
-    parsed.ai_provider = 'Claude (Fallback)';
-    console.log('[AI] Claude Fallback success');
-    return JSON.stringify(parsed);
-  } catch(e) {
-    return text;
-  }
+  const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : text);
+  parsed.ai_provider = 'Claude API';
+  return parsed;
 }
 
-module.exports = { askGemini };
+module.exports = { askGeminiDirect, askClaudeDirect };
