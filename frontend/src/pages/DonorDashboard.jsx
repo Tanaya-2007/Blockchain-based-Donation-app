@@ -46,12 +46,15 @@ export default function DonorDashboard() {
       if (newIds.length === 0) return;
 
       try {
+        const { getDoc, doc } = await import('firebase/firestore');
         const results = await Promise.all(
-          newIds.map(id => getDocs(query(collection(db, 'campaigns'), where('__name__', '==', id))))
+          newIds.map(id => getDoc(doc(db, 'campaigns', id)))
         );
         const newCamps = {};
         results.forEach(snap => {
-          snap.docs.forEach(d => { newCamps[d.id] = { id: d.id, ...d.data() }; });
+          if (snap.exists()) {
+            newCamps[snap.id] = { id: snap.id, ...snap.data() };
+          }
         });
         newIds.forEach(id => fetchedCampIds.current.add(id));
         setCampaigns(prev => ({ ...prev, ...newCamps }));
@@ -67,8 +70,19 @@ export default function DonorDashboard() {
   }, [user]);
 
   const totalDonated = donations.reduce((s, d) => s + (d.amount || 0), 0);
-  const totalLocked  = donations.filter(d => d.status === 'locked').reduce((s, d) => s + (d.amount || 0), 0);
-  const totalReleased= donations.filter(d => d.status === 'released').reduce((s, d) => s + (d.amount || 0), 0);
+
+  // Proportional released funds: d.amount * (campaign.releasedFunds / campaign.raisedAmount)
+  const totalReleased = donations.reduce((s, d) => {
+    if (d.status === 'refunded') return s;
+    const camp = campaigns[d.campaignId];
+    if (camp && camp.raisedAmount > 0) {
+      const releaseRatio = Math.min(1, (camp.releasedFunds || 0) / camp.raisedAmount);
+      return s + (d.amount * releaseRatio);
+    }
+    return s;
+  }, 0);
+
+  const totalLocked = Math.max(0, totalDonated - totalReleased - donations.filter(d => d.status === 'refunded').reduce((s, d) => s + (d.amount || 0), 0));
 
   return (
     <div style={{ padding: '40px 5%', maxWidth: '1000px', margin: '0 auto', minHeight: 'calc(100vh - 68px)' }}>
@@ -175,17 +189,36 @@ export default function DonorDashboard() {
                     <div style={{ fontSize: '20px', fontWeight: 800, color: '#22d3ee', marginBottom: '8px' }}>
                       ₹{(d.amount || 0).toLocaleString('en-IN')}
                     </div>
-                    <span style={{
-                      fontSize: '11px', fontWeight: 700, padding: '4px 12px', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.5px',
-                      ...(d.status === 'locked'
-                        ? { background: 'rgba(245,158,11,0.15)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.3)' }
-                        : d.status === 'refunded'
-                        ? { background: 'rgba(239,68,68,0.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)' }
-                        : { background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.3)' }
-                      ),
-                    }}>
-                      {d.status === 'locked' ? '🔒 Locked' : d.status === 'refunded' ? `💸 ${d.refundStatus || 'Refunded'} (₹${d.refundedAmount||0})` : '✓ Released'}
-                    </span>
+                    {(() => {
+                      let statusText = '🔒 Locked';
+                      let bg = 'rgba(245,158,11,0.15)';
+                      let col = '#fcd34d';
+                      let bdr = '1px solid rgba(245,158,11,0.3)';
+                      
+                      if (d.status === 'refunded') {
+                        statusText = `💸 ${d.refundStatus || 'Refunded'} (₹${d.refundedAmount||0})`;
+                        bg = 'rgba(239,68,68,0.15)'; col = '#fca5a5'; bdr = '1px solid rgba(239,68,68,0.3)';
+                      } else if (camp) {
+                        const raised = camp.raisedAmount || 0;
+                        const released = camp.releasedFunds || 0;
+                        if (released > 0 && released >= raised) {
+                          statusText = '✓ Fully Released';
+                          bg = 'rgba(16,185,129,0.15)'; col = '#6ee7b7'; bdr = '1px solid rgba(16,185,129,0.3)';
+                        } else if (released > 0 && released < raised) {
+                          statusText = '⏳ Partially Released';
+                          bg = 'rgba(124,58,237,0.15)'; col = '#c4b5fd'; bdr = '1px solid rgba(124,58,237,0.3)';
+                        }
+                      }
+
+                      return (
+                        <span style={{
+                          fontSize: '11px', fontWeight: 700, padding: '4px 12px', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.5px',
+                          background: bg, color: col, border: bdr
+                        }}>
+                          {statusText}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
               );

@@ -283,7 +283,7 @@ Return ONLY valid JSON (no markdown):
         ? [{ type: 'image', source: { type: 'base64', media_type: imgType, data: imgBase64 } }, { type: 'text', text: prompt }]
         : prompt + '\n\nNo image — score 60, verdict DONOR_VOTE.';
 
-      const res = await fetch('http://localhost:5000/api/ai/messages', {
+      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/ai/messages`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content }] }),
       });

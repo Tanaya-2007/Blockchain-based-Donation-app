@@ -275,7 +275,7 @@ Return ONLY valid JSON, no markdown, no extra text:
 }`;
 
   try {
-    const res = await fetch('http://localhost:5000/api/ai/messages', {
+    const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/ai/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

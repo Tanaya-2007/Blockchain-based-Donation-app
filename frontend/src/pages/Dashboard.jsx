@@ -119,6 +119,21 @@ export default function Dashboard() {
     { name: 'Locked (Safety)',     value: totalLocked }
   ].filter(d => d.value > 0);
 
+  const [filterTab, setFilterTab] = useState('All');
+  
+  const filteredCampaigns = useMemo(() => {
+    return campaigns.filter(c => {
+      const raised = c.raisedAmount || 0;
+      const released = c.releasedFunds || 0;
+      const isCompleted = c.currentMilestone && c.milestones && (c.currentMilestone > (Array.isArray(c.milestones) ? c.milestones.length : Object.keys(c.milestones).length));
+      const isReleased = released > 0 || c.status === 'released' || isCompleted;
+
+      if (filterTab === 'Released') return isReleased;
+      if (filterTab === 'Pending') return !isReleased;
+      return true; // 'All'
+    });
+  }, [campaigns, filterTab]);
+
   const fmt = n => `₹${(n || 0).toLocaleString('en-IN')}`;
   
   const STATS = [
@@ -231,8 +246,98 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+
+          {/* ──────────────────────────────────────────────────────── */}
+          {/* CAMPAIGN TRANSPARENCY BOXES */}
+          {/* ──────────────────────────────────────────────────────── */}
+          <div style={{ marginTop: '48px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '16px', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+              <div>
+                <h3 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '24px', fontWeight: 800, color: '#fff' }}>Campaign Tracking</h3>
+                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', marginTop: '4px' }}>Real-time status of locked vs released funds</p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <FilterTab label="All" active={filterTab === 'All'} onClick={() => setFilterTab('All')} />
+                <FilterTab label="Released" active={filterTab === 'Released'} onClick={() => setFilterTab('Released')} />
+                <FilterTab label="Pending" active={filterTab === 'Pending'} onClick={() => setFilterTab('Pending')} />
+              </div>
+            </div>
+
+            {filteredCampaigns.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px', color: 'rgba(255,255,255,0.4)' }}>
+                No campaigns match this filter.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+                {filteredCampaigns.map(c => {
+                  const raised = c.raisedAmount || 0;
+                  const released = c.releasedFunds || 0;
+                  const target = c.targetAmount || 0;
+                  const locked = Math.max(0, raised - released);
+                  const isFullyReleased = released > 0 && released >= raised;
+
+                  return (
+                    <div key={c.id} style={{
+                      borderRadius: '20px', border: '1px solid rgba(255,255,255,0.06)',
+                      background: '#0a0c1a', padding: '24px', position: 'relative',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: 'rgba(255,255,255,0.3)', marginBottom: '8px' }}>
+                        {c.category || 'Campaign'}
+                      </div>
+                      <h4 style={{ fontSize: '18px', fontWeight: 700, color: '#fff', marginBottom: '16px', lineHeight: 1.3 }}>{c.title}</h4>
+                      
+                      {/* Progress Bar */}
+                      <div style={{ height: '6px', borderRadius: '6px', background: 'rgba(255,255,255,0.06)', marginBottom: '16px', display: 'flex', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${Math.min(100, (released/target)*100 || 0)}%`, background: '#10b981' }} />
+                        <div style={{ height: '100%', width: `${Math.min(100, (locked/target)*100 || 0)}%`, background: '#fbbf24' }} />
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                        <div>
+                          <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released</div>
+                          <div style={{ fontSize: '16px', fontWeight: 800, color: '#10b981' }}>₹{released.toLocaleString('en-IN')}</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Locked (Safety)</div>
+                          <div style={{ fontSize: '16px', fontWeight: 800, color: '#fbbf24' }}>₹{locked.toLocaleString('en-IN')}</div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>
+                          Goal: ₹{target.toLocaleString('en-IN')}
+                        </div>
+                        <span style={{
+                          fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '999px',
+                          ...(isFullyReleased || released > 0
+                            ? { background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.3)' }
+                            : { background: 'rgba(245,158,11,0.15)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.3)' })
+                        }}>
+                          {isFullyReleased ? '✓ Fully Released' : released > 0 ? '⏳ Partially Released' : '🔒 Pending Release'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>
+  );
+}
+
+function FilterTab({ label, active, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: '6px 16px', borderRadius: '999px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
+      background: active ? 'rgba(124,58,237,0.15)' : 'transparent',
+      border: active ? '1px solid rgba(124,58,237,0.4)' : '1px solid rgba(255,255,255,0.1)',
+      color: active ? '#c4b5fd' : 'rgba(255,255,255,0.4)'
+    }}>
+      {label}
+    </button>
   );
 }

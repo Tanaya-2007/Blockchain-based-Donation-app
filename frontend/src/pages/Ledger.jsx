@@ -112,7 +112,9 @@ export default function Ledger() {
       mergeAndSet();
     }, (err) => { console.error("Ledger Proof Error:", err); checkLoading(); });
 
-    const unsubLedger = onSnapshot(query(collection(db, 'ledger'), orderBy('timestamp', 'desc'), limit(150)), (snap) => {
+    // We fetch without orderBy because old ledger entries use `timestamp` and new ones use `createdAt`. 
+    // Firestore index queries will completely exclude documents missing the orderBy field.
+    const unsubLedger = onSnapshot(query(collection(db, 'ledger'), limit(150)), (snap) => {
       ledgerEntries = snap.docs.map(d => {
         const data = d.data();
         if (data.type === 'donation') return null;
