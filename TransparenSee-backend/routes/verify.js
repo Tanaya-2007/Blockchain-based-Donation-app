@@ -2,11 +2,6 @@ const express = require('express');
 const router = express.Router();
 const { askGemini } = require('../services/gemini');
 
-/**
- * AI Verification Route
- * Replaces old Claude logic with Gemini 2.5 Flash while maintaining the same 
- * Anthropic-like request/response format so the frontend doesn't need to change.
- */
 router.post('/messages', async (req, res) => {
   try {
     const messages = req.body.messages;
@@ -19,7 +14,6 @@ router.post('/messages', async (req, res) => {
     let base64Image = null;
     let mimeType = null;
 
-    // Parse the Anthropic-style payload from the frontend
     if (Array.isArray(contentArray)) {
       for (const part of contentArray) {
         if (part.type === 'text') {
@@ -37,37 +31,36 @@ router.post('/messages', async (req, res) => {
       return res.status(400).json({ error: 'Missing prompt text' });
     }
 
-    // Call Gemini 2.5 Flash
-    let geminiJsonString;
+    // Call Gemini 2.5 Flash with Claude Fallback
+    let aiJsonString;
     try {
-      geminiJsonString = await askGemini(promptText, base64Image, mimeType);
-    } catch (geminiError) {
-      // Bonus: If Gemini fails (invalid key, quota exceeded), we return a safe JSON payload 
-      // to trick the frontend into falling back elegantly (admin review state).
-      console.error('[Verify Route] Gemini failed. Triggering frontend fallback.');
-      geminiJsonString = JSON.stringify({
-        score: 72,
-        confidence_score: 72,
-        verdict: "DONOR_VOTE",
-        decision: "manual_review",
-        status: "admin_review",
-        document_classification: "api_error",
-        matched_fields: { org_name_match: false, website_valid: false, purpose_match: false },
-        reasoning: "AI Verification Error: " + geminiError.message
+      aiJsonString = await askGemini(promptText, base64Image, mimeType);
+    } catch (aiError) {
+      console.error('[Verify Route] Both AI providers failed. Triggering frontend fallback.', aiError);
+      aiJsonString = JSON.stringify({
+        status: "rejected",
+        confidence_score: 0,
+        ai_provider: "Error Fallback",
+        document_type: "api_error",
+        field_match_score: 0,
+        authenticity_score: 0,
+        fraud_risk_score: 100,
+        relevance_score: 0,
+        reasons: ["AI Verification Error: " + aiError.message],
+        red_flags: ["AI completely failed to process document"],
+        recommended_action: "reject"
       });
     }
 
-    // Wrap the Gemini JSON output in the Anthropic response structure
-    // so the frontend code parsed = JSON.parse(raw.match(/\{[\s\S]*\}/)[0]) continues to work perfectly.
     const anthropicFormat = {
-      id: "msg_gemini_" + Date.now(),
+      id: "msg_ai_" + Date.now(),
       type: "message",
       role: "assistant",
-      model: "gemini-2.5-flash",
+      model: "enterprise-multi-stage",
       content: [
         {
           type: "text",
-          text: geminiJsonString
+          text: aiJsonString
         }
       ]
     };
