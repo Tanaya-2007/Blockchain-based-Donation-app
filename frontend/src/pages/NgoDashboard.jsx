@@ -61,7 +61,8 @@ function isMeaningfulText(str, minWords = 2) {
   if (/^[\d\s\W]+$/.test(s)) return false;
 
   // Reject keyboard rows
-  if (/^[qwertyuiopasdfghjklzxcvbnm]{8,}$/i.test(s.replace(/\s/g, ''))) return false;
+  const noSpace = s.replace(/\s/g, '').toLowerCase();
+  if (noSpace.includes('qwertyuiop') || noSpace.includes('asdfghjkl') || noSpace.includes('zxcvbnm')) return false;
 
   // Must have at least minWords real words (≥ 2 chars with at least 1 vowel or consonant mix)
   const words = s.split(/\s+/).filter(w => w.length >= 2);
