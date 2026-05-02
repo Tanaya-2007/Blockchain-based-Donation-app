@@ -125,11 +125,15 @@ export default function Dashboard() {
     return campaigns.filter(c => {
       const raised = c.raisedAmount || 0;
       const released = c.releasedFunds || 0;
-      const isCompleted = c.currentMilestone && c.milestones && (c.currentMilestone > (Array.isArray(c.milestones) ? c.milestones.length : Object.keys(c.milestones).length));
-      const isReleased = released > 0 || c.status === 'released' || isCompleted;
+      const locked = Math.max(0, raised - released);
 
-      if (filterTab === 'Released') return isReleased;
-      if (filterTab === 'Pending') return !isReleased;
+      const hasReleased = released > 0 || c.status === 'released';
+      // If there are locked funds, it has pending releases. 
+      // If no funds raised yet, it's also pending (not released).
+      const hasPending = locked > 0 || raised === 0;
+
+      if (filterTab === 'Released') return hasReleased;
+      if (filterTab === 'Pending') return hasPending;
       return true; // 'All'
     });
   }, [campaigns, filterTab]);
@@ -274,7 +278,7 @@ export default function Dashboard() {
                   const released = c.releasedFunds || 0;
                   const target = c.targetAmount || 0;
                   const locked = Math.max(0, raised - released);
-                  const isFullyReleased = released > 0 && released >= raised;
+                  const isFullyReleased = released > 0 && locked === 0;
 
                   return (
                     <div key={c.id} style={{
@@ -310,11 +314,11 @@ export default function Dashboard() {
                         </div>
                         <span style={{
                           fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '999px',
-                          ...(isFullyReleased || released > 0
+                          ...(isFullyReleased 
                             ? { background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.3)' }
                             : { background: 'rgba(245,158,11,0.15)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.3)' })
                         }}>
-                          {isFullyReleased ? '✓ Fully Released' : released > 0 ? '⏳ Partially Released' : '🔒 Pending Release'}
+                          {isFullyReleased ? '✓ Fully Released' : '🔒 Pending Release'}
                         </span>
                       </div>
                     </div>
