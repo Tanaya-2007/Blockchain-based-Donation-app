@@ -86,7 +86,7 @@ export default function Dashboard() {
   const totalReleased = useMemo(() => campaigns.reduce((sum, c) => sum + (c.releasedFunds || 0), 0), [campaigns]);
   
   // 3. lockedFunds = strictly totalDonated - releasedFunds
-  const totalLocked = Math.max(0, totalDonated - totalReleased);
+  const totalLocked = Math.abs(totalDonated - totalReleased);
 
   // Other stats
   const activeDonors = useMemo(() => new Set(donations.map(d => d.donorId || d.donorEmail)).size, [donations]);
@@ -125,7 +125,7 @@ export default function Dashboard() {
     return campaigns.filter(c => {
       const raised = c.raisedAmount || 0;
       const released = c.releasedFunds || 0;
-      const locked = Math.max(0, raised - released);
+      const locked = Math.abs(raised - released);
 
       const hasReleased = released > 0 || c.status === 'released';
       // If there are locked funds, it has pending releases. 
@@ -277,7 +277,7 @@ export default function Dashboard() {
                   const raised = c.raisedAmount || 0;
                   const released = c.releasedFunds || 0;
                   const target = c.targetAmount || 0;
-                  const locked = Math.max(0, raised - released);
+                  const locked = Math.abs(raised - released);
                   const isFullyReleased = released > 0 && locked === 0;
 
                   return (

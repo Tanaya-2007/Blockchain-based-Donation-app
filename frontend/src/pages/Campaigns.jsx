@@ -100,7 +100,7 @@ export default function Campaigns({ onDonate }) {
           {shown.map(c => {
             const raised    = c.raisedAmount || 0;
             const released  = c.releasedFunds || 0;
-            const locked    = Math.max(0, raised - released);
+            const locked    = Math.abs(raised - released);
             const target    = c.targetAmount || 0;
             const remaining = Math.max(0, target - raised);
             const pct       = target ? Math.min(Math.round((raised / target) * 100), 100) : 0;
