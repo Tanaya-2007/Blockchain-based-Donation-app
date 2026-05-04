@@ -1,10 +1,31 @@
-import { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { collection, orderBy, query, limit, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  PieChart, Pie, Cell
+  PieChart, Pie, Cell, BarChart, Bar, Legend
 } from 'recharts';
+
+function FilterTab({ label, active, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '6px 16px',
+        borderRadius: '20px',
+        fontSize: '13px',
+        fontWeight: 600,
+        cursor: 'pointer',
+        border: active ? '1px solid #3b82f6' : '1px solid rgba(255,255,255,0.1)',
+        background: active ? 'rgba(59,130,246,0.1)' : 'transparent',
+        color: active ? '#fff' : 'rgba(255,255,255,0.6)',
+        transition: 'all 0.2s'
+      }}
+    >
+      {label}
+    </button>
+  );
+}
 
 function SkeletonCards() {
   return (
@@ -22,9 +43,8 @@ function SkeletonCards() {
 
 function SkeletonCharts() {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr lg:300px', gap: '24px', marginBottom: '24px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px', marginBottom: '24px' }}>
       <div style={{ height: '350px', borderRadius: '24px', background: 'linear-gradient(90deg, #0a0c1a 25%, #11142b 50%, #0a0c1a 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite', flex: 2 }} />
-      <div style={{ height: '350px', borderRadius: '24px', background: 'linear-gradient(90deg, #0a0c1a 25%, #11142b 50%, #0a0c1a 75%)', backgroundSize: '200% 100%', animation: 'shimmer 1.5s infinite', flex: 1 }} />
     </div>
   );
 }
@@ -33,6 +53,7 @@ export default function Dashboard() {
   const [campaigns,  setCampaigns]  = useState([]);
   const [donations,  setDonations]  = useState([]);
   const [loading,    setLoading]    = useState(true);
+  const [hoveredPie, setHoveredPie] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -47,7 +68,17 @@ export default function Dashboard() {
 
     // Parallel fetch via optimized listeners
     const unsubCamp = onSnapshot(collection(db, 'campaigns'), (snap) => {
-      if (mounted) setCampaigns(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      if (!mounted) return;
+      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      import('firebase/firestore').then(({ doc, updateDoc }) => {
+        list.forEach(c => {
+          if ((c.releasedFunds || 0) > (c.raisedAmount || 0)) {
+            updateDoc(doc(db, 'campaigns', c.id), { raisedAmount: c.releasedFunds || 0 }).catch(console.error);
+            c.raisedAmount = c.releasedFunds || 0;
+          }
+        });
+      });
+      setCampaigns(list);
     }, (err) => {
       console.error('Campaigns read error (guest mode):', err);
     });
@@ -86,7 +117,7 @@ export default function Dashboard() {
   const totalReleased = useMemo(() => campaigns.reduce((sum, c) => sum + (c.releasedFunds || 0), 0), [campaigns]);
   
   // 3. lockedFunds = strictly totalDonated - releasedFunds
-  const totalLocked = Math.abs(totalDonated - totalReleased);
+  const totalLocked = Math.max(0, totalDonated - totalReleased);
 
   // Other stats
   const activeDonors = useMemo(() => new Set(donations.map(d => d.donorId || d.donorEmail)).size, [donations]);
@@ -115,9 +146,21 @@ export default function Dashboard() {
   }, [donations]);
 
   const pieData = [
-    { name: 'Released (Verified)', value: totalReleased },
-    { name: 'Locked (Safety)',     value: totalLocked }
+    { name: 'Locked (Safety)', value: totalLocked, color: '#f59e0b' },
+    { name: 'Released (Verified)', value: totalReleased, color: '#10b981' }
   ].filter(d => d.value > 0);
+  const pieTotal = pieData.reduce((acc, d) => acc + d.value, 0);
+
+  const topNGOs = useMemo(() => {
+    return [...campaigns]
+      .sort((a, b) => (b.releasedFunds || 0) - (a.releasedFunds || 0))
+      .slice(0, 5)
+      .map(c => ({
+        name: c.title.length > 15 ? c.title.substring(0, 15) + '...' : c.title,
+        Released: c.releasedFunds || 0,
+        Locked: Math.max(0, (c.raisedAmount || 0) - (c.releasedFunds || 0))
+      }));
+  }, [campaigns]);
 
   const [filterTab, setFilterTab] = useState('All');
   
@@ -125,7 +168,7 @@ export default function Dashboard() {
     return campaigns.filter(c => {
       const raised = c.raisedAmount || 0;
       const released = c.releasedFunds || 0;
-      const locked = Math.abs(raised - released);
+      const locked = Math.max(0, raised - released);
 
       const hasReleased = released > 0 || c.status === 'released';
       // If there are locked funds, it has pending releases. 
@@ -149,7 +192,7 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-4 sm:px-6 lg:px-8 py-8" style={{ minHeight: '100vh' }}>
+    <div className="mx-auto w-full max-w-[1200px] px-4 sm:px-6 lg:px-8 py-8" style={{ minHeight: '100vh', fontFamily: 'sans-serif' }}>
       <div style={{ marginBottom: '36px' }}>
         <h2 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '34px', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px', marginBottom: '8px' }}>
           Real-Time Transparency
@@ -186,10 +229,9 @@ export default function Dashboard() {
             ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr lg:300px', gap: '24px', marginBottom: '24px' }}>
-            
-            {/* AREA CHART - DONATION TREND */}
-            <div style={{ borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)', background: '#0a0c1a', padding: '28px', flex: 2 }}>
+          {/* AREA CHART */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)', background: '#0a0c1a', padding: '28px', width: '100%' }}>
               <div style={{ fontSize: '18px', fontWeight: 700, color: '#fff', marginBottom: '24px', fontFamily: "'Playfair Display', Georgia, serif" }}>
                 Daily Donation Trend
               </div>
@@ -219,36 +261,85 @@ export default function Dashboard() {
                 )}
               </div>
             </div>
+          </div>
 
-            {/* PIE CHART - FUNDS SPLIT */}
-            <div style={{ borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)', background: '#0a0c1a', padding: '28px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ fontSize: '18px', fontWeight: 700, color: '#fff', marginBottom: '8px', fontFamily: "'Playfair Display', Georgia, serif" }}>
-                Global Funds Split
+          {/* TWO NEW CHARTS */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginBottom: '24px' }}>
+            
+            {/* Top Network Beneficiaries */}
+            <div style={{ borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)', background: '#0a0c1a', padding: '28px' }}>
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#fff' }}>Top Network Beneficiaries</h3>
+                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', marginTop: '4px' }}>NGOs ranked by verified milestone releases</p>
               </div>
-              <div style={{ flex: 1, minHeight: '260px', width: '100%', position: 'relative' }}>
-                {pieData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={70} outerRadius={100} paddingAngle={5} dataKey="value" stroke="none">
-                        <Cell fill="#10b981" /> {/* Released */}
-                        <Cell fill="#fbbf24" /> {/* Locked */}
-                      </Pie>
-                      <RechartsTooltip 
-                        contentStyle={{ background: '#111827', border: 'none', borderRadius: '12px', color: '#fff' }}
-                        formatter={(val) => [`₹${val.toLocaleString('en-IN')}`, 'Amount']}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div style={{ display: 'flex', height: '100%', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.2)' }}>No data yet</div>
-                )}
-                {/* Center text */}
-                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px' }}>Total</div>
-                  <div style={{ fontSize: '18px', fontWeight: 800, color: '#fff' }}>₹{(totalDonated/1000).toFixed(0)}k+</div>
+              <div style={{ height: '300px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={topNGOs} layout="vertical" margin={{ top: 0, right: 30, left: 20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={true} vertical={false} />
+                    <XAxis type="number" stroke="rgba(255,255,255,0.3)" fontSize={12} tickFormatter={n => '₹'+(n/1000)+'k'} />
+                    <YAxis dataKey="name" type="category" stroke="rgba(255,255,255,0.7)" fontSize={12} width={100} tickLine={false} axisLine={false} />
+                    <RechartsTooltip 
+                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                      contentStyle={{ background: '#0a0c1a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                      itemStyle={{ fontWeight: 700 }}
+                    />
+                    <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                    <Bar dataKey="Locked" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} animationDuration={1000} />
+                    <Bar dataKey="Released" stackId="a" fill="#10b981" radius={[0, 8, 8, 0]} animationDuration={1000} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Ecosystem Overview Donut */}
+            <div style={{ borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)', background: '#0a0c1a', padding: '28px', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 700, color: '#fff' }}>Ecosystem Overview</h3>
+                <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', marginTop: '4px' }}>Complete platform health and fund statuses</p>
+              </div>
+              <div style={{ flex: 1, position: 'relative', height: '300px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%" cy="50%"
+                      innerRadius={80}
+                      outerRadius={110}
+                      paddingAngle={5}
+                      dataKey="value"
+                      stroke="none"
+                      animationDuration={1000}
+                      onMouseEnter={(_, index) => setHoveredPie(index)}
+                      onMouseLeave={() => setHoveredPie(null)}
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={entry.color} 
+                          style={{
+                            filter: hoveredPie === index ? `drop-shadow(0 0 10px ${entry.color})` : 'none',
+                            transform: hoveredPie === index ? 'scale(1.05)' : 'scale(1)',
+                            transformOrigin: 'center',
+                            transition: 'all 0.3s ease'
+                          }} 
+                        />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip 
+                      contentStyle={{ background: '#0a0c1a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                      itemStyle={{ fontWeight: 800, color: '#fff' }}
+                      formatter={(val) => [`₹${val.toLocaleString('en-IN')}`, '']}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                   <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Vault</div>
+                   <div style={{ fontSize: '28px', fontWeight: 900, color: '#fff', marginTop: '4px' }}>₹{(pieTotal/1000).toFixed(0)}k+</div>
                 </div>
               </div>
             </div>
+
           </div>
 
           {/* ──────────────────────────────────────────────────────── */}
@@ -277,8 +368,7 @@ export default function Dashboard() {
                   const raised = c.raisedAmount || 0;
                   const released = c.releasedFunds || 0;
                   const target = c.targetAmount || 0;
-                  const locked = Math.abs(raised - released);
-                  const isFullyReleased = released > 0 && locked === 0;
+                  const locked = Math.max(0, raised - released);
 
                   return (
                     <div key={c.id} style={{
@@ -307,20 +397,6 @@ export default function Dashboard() {
                           <div style={{ fontSize: '16px', fontWeight: 800, color: '#fbbf24' }}>₹{locked.toLocaleString('en-IN')}</div>
                         </div>
                       </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>
-                          Goal: ₹{target.toLocaleString('en-IN')}
-                        </div>
-                        <span style={{
-                          fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '999px',
-                          ...(isFullyReleased 
-                            ? { background: 'rgba(16,185,129,0.15)', color: '#6ee7b7', border: '1px solid rgba(16,185,129,0.3)' }
-                            : { background: 'rgba(245,158,11,0.15)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.3)' })
-                        }}>
-                          {isFullyReleased ? '✓ Fully Released' : '🔒 Pending Release'}
-                        </span>
-                      </div>
                     </div>
                   );
                 })}
@@ -330,18 +406,5 @@ export default function Dashboard() {
         </>
       )}
     </div>
-  );
-}
-
-function FilterTab({ label, active, onClick }) {
-  return (
-    <button onClick={onClick} style={{
-      padding: '6px 16px', borderRadius: '999px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
-      background: active ? 'rgba(124,58,237,0.15)' : 'transparent',
-      border: active ? '1px solid rgba(124,58,237,0.4)' : '1px solid rgba(255,255,255,0.1)',
-      color: active ? '#c4b5fd' : 'rgba(255,255,255,0.4)'
-    }}>
-      {label}
-    </button>
   );
 }

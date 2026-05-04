@@ -38,6 +38,17 @@ export default function Campaigns({ onDonate }) {
         const snap = await getDocs(query(collection(db, 'campaigns'), where('status', '==', 'active')));
         const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         list.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+        
+        // Auto-heal corrupted campaigns where released > raised
+        import('firebase/firestore').then(({ doc, updateDoc }) => {
+          list.forEach(c => {
+            if ((c.releasedFunds || 0) > (c.raisedAmount || 0)) {
+               updateDoc(doc(db, 'campaigns', c.id), { raisedAmount: c.releasedFunds || 0 }).catch(console.error);
+               c.raisedAmount = c.releasedFunds || 0; 
+            }
+          });
+        });
+
         setCampaigns(list);
       } catch (e) { console.error(e); setError(e.message); }
       setLoading(false);
@@ -100,7 +111,7 @@ export default function Campaigns({ onDonate }) {
           {shown.map(c => {
             const raised    = c.raisedAmount || 0;
             const released  = c.releasedFunds || 0;
-            const locked    = Math.abs(raised - released);
+            const locked    = Math.max(0, raised - released);
             const target    = c.targetAmount || 0;
             const remaining = Math.max(0, target - raised);
             const pct       = target ? Math.min(Math.round((raised / target) * 100), 100) : 0;
