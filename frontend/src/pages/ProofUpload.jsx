@@ -279,15 +279,17 @@ Return ONLY valid JSON (no markdown):
 
     let aiResult = null;
     try {
-      const content = imgBase64
-        ? [{ type: 'image', source: { type: 'base64', media_type: imgType, data: imgBase64 } }, { type: 'text', text: prompt }]
-        : prompt + '\n\nNo image — score 60, verdict DONOR_VOTE.';
-
-      const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/ai/messages`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content }] }),
-      });
-      const data = await res.json();
+      let data;
+      if (imgBase64) {
+        const content = [{ type: 'image', source: { type: 'base64', media_type: imgType, data: imgBase64 } }, { type: 'text', text: prompt }];
+        const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/ai/messages`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content }] }),
+        });
+        data = await res.json();
+      } else {
+        data = { content: [{ text: '{"score": 75, "verdict": "DONOR_VOTE", "summary": "PDF document uploaded — requires manual admin review.", "checks": [{"label": "Format Integrity", "status": "WARN", "detail": "PDF cannot be automatically verified by AI"}]}' }] };
+      }
       aiResult = JSON.parse((data.content?.[0]?.text ?? '').match(/\{[\s\S]*\}/)[0]);
     } catch {
       aiResult = {
@@ -596,7 +598,7 @@ Return ONLY valid JSON (no markdown):
                   </div>
                   <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '12px' }}>Verification Checks</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                    {result.checks.map((c, i) => (
+                    {(result.checks || []).map((c, i) => (
                       <div key={i} style={{ display: 'flex', gap: '10px', fontSize: '12px', alignItems: 'flex-start' }}>
                         <span style={{ fontWeight: 700, color: statusColor[c.status], marginTop: '1px', flexShrink: 0 }}>{statusIcon[c.status]}</span>
                         <div>
