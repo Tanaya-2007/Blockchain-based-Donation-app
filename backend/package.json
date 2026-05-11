@@ -1,0 +1,22 @@
+{
+  "name": "transparensee-backend",
+  "version": "1.0.0",
+  "description": "Backend for TransparenSee",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "axios": "^1.16.0",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.1",
+    "express": "^4.19.2",
+    "firebase-admin": "^12.2.0",
+    "razorpay": "^2.9.6",
+    "tesseract.js": "^7.0.0"
+  }
+}
