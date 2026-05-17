@@ -1,4 +1,4 @@
-name: Deploy to Firebase Hosting on merge
+name: Deploy to Firebase Hosting
 
 on:
   push:
@@ -8,16 +8,17 @@ on:
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Setup Node 18
-        uses: actions/setup-node@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: 18
 
-      # ✅ KEY FIX — cd into frontend folder before npm install/build
-      - name: Install dependencies
+      - name: Install Dependencies
         working-directory: frontend
         run: npm install
 
@@ -35,15 +36,13 @@ jobs:
           echo "VITE_CLOUDINARY_UPLOAD_PRESET=${{ secrets.VITE_CLOUDINARY_UPLOAD_PRESET }}" >> .env.production
           echo "VITE_ADMIN_EMAILS=${{ secrets.VITE_ADMIN_EMAILS }}" >> .env.production
 
-      - name: Build
+      - name: Build Project
         working-directory: frontend
         run: npm run build
 
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
       - name: Deploy to Firebase Hosting
-        uses: FirebaseExtended/action-firebase-deploy@v0
-        with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_TRANSPARENT_FUND_47CD9 }}
-          channelId: live
-          projectId: transparent-fund-47cd9
-          entryPoint: ./frontend
+        working-directory: frontend
+        run: firebase deploy --only hosting --project transparent-fund-47cd9 --token "${{ secrets.FIREBASE_TOKEN }}"
