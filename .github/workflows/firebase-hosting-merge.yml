@@ -17,6 +17,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install Dependencies
         working-directory: frontend
@@ -25,7 +27,9 @@ jobs:
       - name: Create .env.production
         working-directory: frontend
         run: |
-          echo "VITE_BACKEND_URL=https://blockchain-based-donation-app.onrender.com" > .env.production
+          cat > .env.production << 'ENVEOF'
+          VITE_BACKEND_URL=https://blockchain-based-donation-app.onrender.com
+          ENVEOF
           echo "VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }}" >> .env.production
           echo "VITE_FIREBASE_AUTH_DOMAIN=${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}" >> .env.production
           echo "VITE_FIREBASE_PROJECT_ID=${{ secrets.VITE_FIREBASE_PROJECT_ID }}" >> .env.production
@@ -35,6 +39,27 @@ jobs:
           echo "VITE_CLOUDINARY_CLOUD_NAME=${{ secrets.VITE_CLOUDINARY_CLOUD_NAME }}" >> .env.production
           echo "VITE_CLOUDINARY_UPLOAD_PRESET=${{ secrets.VITE_CLOUDINARY_UPLOAD_PRESET }}" >> .env.production
           echo "VITE_ADMIN_EMAILS=${{ secrets.VITE_ADMIN_EMAILS }}" >> .env.production
+
+      - name: Verify all secrets are loaded
+        working-directory: frontend
+        run: |
+          echo "=== Secret verification ==="
+          MISSING=0
+          for KEY in VITE_FIREBASE_API_KEY VITE_FIREBASE_AUTH_DOMAIN VITE_FIREBASE_PROJECT_ID VITE_FIREBASE_STORAGE_BUCKET VITE_FIREBASE_MESSAGING_SENDER_ID VITE_FIREBASE_APP_ID VITE_CLOUDINARY_CLOUD_NAME VITE_CLOUDINARY_UPLOAD_PRESET VITE_ADMIN_EMAILS; do
+            VALUE=$(grep "^${KEY}=" .env.production | cut -d'=' -f2-)
+            if [ -z "$VALUE" ]; then
+              echo "❌ MISSING: $KEY — add it to GitHub Secrets!"
+              MISSING=1
+            else
+              echo "✅ SET:     $KEY"
+            fi
+          done
+          if [ $MISSING -eq 1 ]; then
+            echo ""
+            echo "Build stopped — add missing secrets to GitHub and retry."
+            exit 1
+          fi
+          echo "=== All secrets verified ✅ ==="
 
       - name: Build Project
         working-directory: frontend
@@ -46,3 +71,6 @@ jobs:
       - name: Deploy to Firebase Hosting
         working-directory: frontend
         run: firebase deploy --only hosting --project transparent-fund-47cd9 --token "${{ secrets.FIREBASE_TOKEN }}"
+
+      - name: Deployment success
+        run: echo "✅ Live at https://transparent-fund-47cd9.web.app"
