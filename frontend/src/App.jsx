@@ -6,6 +6,7 @@ import RequireAuth      from './auth/RequireAuth';
 import Navbar         from './components/Navbar';
 import Toast          from './components/Toast';
 import DonateModal    from './components/DonateModal';
+import Footer         from './components/footer';
 
 import Home           from './pages/Home';
 import Campaigns      from './pages/Campaigns';
@@ -80,6 +81,7 @@ function AppRoutes() {
           onHide={() => setToast({ msg: '', type: '' })}
         />
       </div>
+      <Footer />
     </>
   );
 }
