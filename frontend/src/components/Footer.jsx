@@ -178,6 +178,29 @@ export default function Footer() {
             </div>
           ))}
 
+          {/* Tech stack mini-column */}
+          <div>
+            <div style={{
+              fontSize:'11px', fontWeight:700,
+              letterSpacing:'2px', textTransform:'uppercase',
+              color:'rgba(255,255,255,0.22)', marginBottom:'18px',
+              display:'flex', alignItems:'center', gap:'8px',
+            }}>
+              <span style={{ width:'16px', height:'1px', background:'rgba(8,145,178,0.6)', display:'inline-block' }}/>
+              Tech Stack
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:'9px' }}>
+              {TECH.map(t => (
+                <div key={t.label} style={{
+                  display:'inline-flex', alignItems:'center', gap:'8px',
+                  fontSize:'12px', color:'rgba(255,255,255,0.4)',
+                }}>
+                  <span style={{ fontSize:'13px' }}>{t.icon}</span>
+                  <span style={{ color: t.color, fontWeight:600 }}>{t.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* ── Security badges row ── */}
@@ -213,7 +236,7 @@ export default function Footer() {
           borderTop:'1px solid rgba(255,255,255,0.04)',
         }}>
           <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.2)' }}>
-            © {year} TransparentFund · Built for Google Solution Challenge · Made with ❤️ in India
+            © {year} TransparentFund · Every rupee accountable. Every milestone verified.
           </div>
           <div style={{ display:'flex', gap:'20px' }}>
             {['Privacy Policy','Terms of Use','Contact'].map(t => (
