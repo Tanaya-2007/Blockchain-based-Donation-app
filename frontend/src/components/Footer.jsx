@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const LINKS = {
   Platform: [
@@ -20,17 +20,15 @@ const LINKS = {
   ],
 };
 
-const TECH = [
-  { label: 'Polygon Blockchain', icon: '⛓️',  color: '#8b5cf6' },
-  { label: 'Gemini 2.0 Flash',   icon: '✨',  color: '#22d3ee' },
-  { label: 'Groq Llama-4',       icon: '⚡',  color: '#a78bfa' },
-  { label: 'Razorpay',           icon: '💳',  color: '#34d399' },
-  { label: 'Firebase',           icon: '🔥',  color: '#fbbf24' },
-  { label: 'Tesseract OCR',      icon: '🔍',  color: '#f472b6' },
-];
-
 export default function Footer() {
   const year = new Date().getFullYear();
+  const navigate = useNavigate();
+
+  /* Navigate to route then instantly scroll window to top */
+  const handleNav = (to) => {
+    navigate(to);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
     <footer style={{
@@ -64,11 +62,14 @@ export default function Footer() {
         }}>
           {/* Brand */}
           <div style={{ maxWidth:'380px' }}>
-            <div style={{
-              fontFamily:"'Playfair Display',Georgia,serif",
-              fontSize:'26px', fontWeight:800, color:'#fff',
-              letterSpacing:'-0.5px', marginBottom:'12px',
-            }}>
+            <div
+              onClick={() => handleNav('/')}
+              style={{
+                fontFamily:"'Playfair Display',Georgia,serif",
+                fontSize:'26px', fontWeight:800, color:'#fff',
+                letterSpacing:'-0.5px', marginBottom:'12px',
+                cursor: 'pointer', display: 'inline-block',
+              }}>
               Transparent<span style={{ color:'#8b5cf6' }}>Fund</span>
             </div>
             <p style={{
@@ -114,33 +115,37 @@ export default function Footer() {
             }}>
               Start donating today
             </div>
-            <Link to="/campaigns" style={{
-              display:'block', padding:'11px 24px', borderRadius:'12px',
-              background:'linear-gradient(135deg,#7c3aed,#0891b2)',
-              color:'#fff', fontWeight:700, fontSize:'14px',
-              textDecoration:'none', marginBottom:'10px',
-              boxShadow:'0 0 20px rgba(124,58,237,0.3)',
-              transition:'opacity 0.2s',
-            }}
+            <button
+              onClick={() => handleNav('/campaigns')}
+              style={{
+                display:'block', width:'100%', padding:'11px 24px', borderRadius:'12px',
+                background:'linear-gradient(135deg,#7c3aed,#0891b2)',
+                color:'#fff', fontWeight:700, fontSize:'14px',
+                border:'none', cursor:'pointer', marginBottom:'10px',
+                boxShadow:'0 0 20px rgba(124,58,237,0.3)',
+                transition:'opacity 0.2s',
+              }}
               onMouseEnter={e => e.currentTarget.style.opacity='0.85'}
               onMouseLeave={e => e.currentTarget.style.opacity='1'}>
               Browse Campaigns →
-            </Link>
-            <Link to="/ngo" style={{
-              display:'block', padding:'10px 24px', borderRadius:'12px',
-              background:'rgba(255,255,255,0.05)',
-              border:'1px solid rgba(255,255,255,0.1)',
-              color:'rgba(255,255,255,0.6)', fontWeight:600, fontSize:'13px',
-              textDecoration:'none', transition:'all 0.2s',
-            }}
+            </button>
+            <button
+              onClick={() => handleNav('/ngo')}
+              style={{
+                display:'block', width:'100%', padding:'10px 24px', borderRadius:'12px',
+                background:'rgba(255,255,255,0.05)',
+                border:'1px solid rgba(255,255,255,0.1)',
+                color:'rgba(255,255,255,0.6)', fontWeight:600, fontSize:'13px',
+                cursor:'pointer', transition:'all 0.2s',
+              }}
               onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.09)'; e.currentTarget.style.color='#fff'; }}
               onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.05)'; e.currentTarget.style.color='rgba(255,255,255,0.6)'; }}>
               Register your NGO
-            </Link>
+            </button>
           </div>
         </div>
 
-        {/* ── Nav links ── */}
+        {/* ── Nav links (3 columns, no Tech Stack) ── */}
         <div style={{
           display:'grid',
           gridTemplateColumns:'repeat(auto-fit, minmax(160px, 1fr))',
@@ -163,44 +168,24 @@ export default function Footer() {
               <ul style={{ listStyle:'none', padding:0, margin:0, display:'flex', flexDirection:'column', gap:'11px' }}>
                 {items.map(l => (
                   <li key={l.label}>
-                    <Link to={l.to} style={{
-                      fontSize:'14px', color:'rgba(255,255,255,0.45)',
-                      textDecoration:'none', transition:'all 0.2s',
-                      display:'inline-flex', alignItems:'center', gap:'6px',
-                    }}
+                    <button
+                      onClick={() => handleNav(l.to)}
+                      style={{
+                        background:'none', border:'none', padding:0,
+                        fontSize:'14px', color:'rgba(255,255,255,0.45)',
+                        textDecoration:'none', transition:'all 0.2s',
+                        display:'inline-flex', alignItems:'center', gap:'6px',
+                        cursor:'pointer', fontFamily:'inherit',
+                      }}
                       onMouseEnter={e => { e.currentTarget.style.color='#fff'; e.currentTarget.style.paddingLeft='4px'; }}
                       onMouseLeave={e => { e.currentTarget.style.color='rgba(255,255,255,0.45)'; e.currentTarget.style.paddingLeft='0'; }}>
                       {l.label}
-                    </Link>
+                    </button>
                   </li>
                 ))}
               </ul>
             </div>
           ))}
-
-          {/* Tech stack mini-column */}
-          <div>
-            <div style={{
-              fontSize:'11px', fontWeight:700,
-              letterSpacing:'2px', textTransform:'uppercase',
-              color:'rgba(255,255,255,0.22)', marginBottom:'18px',
-              display:'flex', alignItems:'center', gap:'8px',
-            }}>
-              <span style={{ width:'16px', height:'1px', background:'rgba(8,145,178,0.6)', display:'inline-block' }}/>
-              Tech Stack
-            </div>
-            <div style={{ display:'flex', flexDirection:'column', gap:'9px' }}>
-              {TECH.map(t => (
-                <div key={t.label} style={{
-                  display:'inline-flex', alignItems:'center', gap:'8px',
-                  fontSize:'12px', color:'rgba(255,255,255,0.4)',
-                }}>
-                  <span style={{ fontSize:'13px' }}>{t.icon}</span>
-                  <span style={{ color: t.color, fontWeight:600 }}>{t.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
 
         {/* ── Security badges row ── */}
