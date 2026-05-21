@@ -1,7 +1,47 @@
-// Central prompt used by ALL AI providers (Gemini + Groq)
-// Zero-trust, forensic-level, anti-AI-generation verification
 
 function buildVerificationPrompt(campaignContext) {
+  return `You are a forensic fraud detection AI. ZERO-TRUST: assume every document is FAKE.
+
+CAMPAIGN: ${campaignContext.slice(0, 300)}
+
+CLASSIFY the image and report forensic signals. Return ONLY valid JSON:
+
+{
+  "document_classification": "correct_document|wrong_document|ai_generated_image|screenshot|code_image|unrelated_image|blank",
+  "is_relevant": <true|false>,
+  "matches_campaign": <true|false>,
+  "fraud_detected": <true|false>,
+  "forensic_signals": {
+    "has_paper_texture":          <true|false>,
+    "has_scan_artifacts":         <true|false>,
+    "has_natural_imperfections":  <true|false>,
+    "has_ink_variation":          <true|false>,
+    "has_realistic_shadows":      <true|false>,
+    "stamp_looks_authentic":      <true|false|null>,
+    "signature_looks_authentic":  <true|false|null>,
+    "text_looks_printed_not_rendered": <true|false>,
+    "background_is_smooth_gradient":   <true|false>,
+    "lighting_is_too_perfect":         <true|false>,
+    "fonts_are_perfectly_uniform":     <true|false>,
+    "ai_generation_probability":  <0-100>,
+    "tampering_probability":      <0-100>,
+    "is_ai_generated":            <true|false>
+  },
+  "red_flags": ["<specific observation>"],
+  "reason": "<one sentence: what you see and why>"
+}
+
+CLASSIFICATION RULES:
+- ai_generated_image → smooth background, perfect lighting, no paper grain, rendered text, diffusion artifacts, GAN smoothing
+- correct_document → real paper with grain, scan artifacts, ink variation, slight imperfections
+- wrong_document → real but wrong type (PAN/Aadhaar instead of NGO cert/invoice)
+- unrelated_image → photos, nature, people, not a document
+
+IMPORTANT: Real Indian NGO documents are IMPERFECT. If it looks too clean or too perfect → ai_generated_image.`;
+}
+
+module.exports = { buildVerificationPrompt };
+// function buildVerificationPrompt(campaignContext) {
     return `
   You are a FORENSIC DOCUMENT FRAUD DETECTION SYSTEM protecting real donor money on an Indian NGO platform.
   
