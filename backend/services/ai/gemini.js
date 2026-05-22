@@ -8,6 +8,52 @@ const MODEL_CASCADE = [
   'gemini-2.0-flash',
 ];
 
+// ── responseSchema — forces Gemini to return EXACT JSON structure ─────────────
+// No more parse failures. No more markdown wrappers. Zero ambiguity.
+const RESPONSE_SCHEMA = {
+  type: SchemaType.OBJECT,
+  properties: {
+    document_classification: {
+      type: SchemaType.STRING,
+      enum: ['correct_document','wrong_document','ai_generated_image',
+             'screenshot','code_image','unrelated_image','blank'],
+    },
+    is_relevant:      { type: SchemaType.BOOLEAN },
+    matches_campaign: { type: SchemaType.BOOLEAN },
+    fraud_detected:   { type: SchemaType.BOOLEAN },
+    forensic_signals: {
+      type: SchemaType.OBJECT,
+      properties: {
+        has_paper_texture:               { type: SchemaType.BOOLEAN },
+        has_scan_artifacts:              { type: SchemaType.BOOLEAN },
+        has_natural_imperfections:       { type: SchemaType.BOOLEAN },
+        has_ink_variation:               { type: SchemaType.BOOLEAN },
+        has_realistic_shadows:           { type: SchemaType.BOOLEAN },
+        text_looks_printed_not_rendered: { type: SchemaType.BOOLEAN },
+        background_is_smooth_gradient:   { type: SchemaType.BOOLEAN },
+        lighting_is_too_perfect:         { type: SchemaType.BOOLEAN },
+        fonts_are_perfectly_uniform:     { type: SchemaType.BOOLEAN },
+        is_ai_generated:                 { type: SchemaType.BOOLEAN },
+        ai_generation_probability:       { type: SchemaType.INTEGER },
+        tampering_probability:           { type: SchemaType.INTEGER },
+      },
+      required: [
+        'has_paper_texture','has_scan_artifacts','has_natural_imperfections',
+        'has_ink_variation','text_looks_printed_not_rendered',
+        'background_is_smooth_gradient','lighting_is_too_perfect',
+        'fonts_are_perfectly_uniform','is_ai_generated',
+        'ai_generation_probability','tampering_probability',
+      ],
+    },
+    red_flags: { type: SchemaType.ARRAY,  items: { type: SchemaType.STRING } },
+    reason:    { type: SchemaType.STRING },
+  },
+  required: [
+    'document_classification','is_relevant','matches_campaign',
+    'fraud_detected','forensic_signals','red_flags','reason',
+  ],
+};
+
 // ── Per-session quota cache — skip dead combos without wasting time ───────────
 const quotaDead = new Set();
 
