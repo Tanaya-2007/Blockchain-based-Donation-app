@@ -1,18 +1,17 @@
 const axios = require('axios');
-const { buildVerificationPrompt } = require('./prompt');
-const { applyHardCaps } = require('./gemini');
 
 function safeParse(text) {
   if (!text) return null;
   try {
-    const cleaned = text.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
+    const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
     const match   = cleaned.match(/\{[\s\S]*\}/);
     return JSON.parse(match ? match[0] : cleaned);
   } catch { return null; }
 }
 
 async function askGroq(prompt, base64Image = null, mimeType = null) {
-  console.log('[GROQ] Starting Groq/Llama-4 Forensic Verification...');
+  console.log('[GROQ] Starting Groq/Llama-4 Verification...');
+
   const groqKey = process.env.GROQ_API_KEY;
   if (!groqKey) {
     console.error('[GROQ] ❌ GROQ_API_KEY missing');
@@ -20,15 +19,15 @@ async function askGroq(prompt, base64Image = null, mimeType = null) {
   }
   console.log('[GROQ] ✅ Key found, calling API...');
 
-  const fullPrompt = buildVerificationPrompt(prompt);
+  // Use prompt directly — same as Gemini, do NOT re-wrap here.
   const userContent = [];
   if (base64Image && mimeType) {
     userContent.push({
       type: 'image_url',
-      image_url: { url: `data:${mimeType};base64,${base64Image}` }
+      image_url: { url: `data:${mimeType};base64,${base64Image}` },
     });
   }
-  userContent.push({ type: 'text', text: fullPrompt });
+  userContent.push({ type: 'text', text: prompt });
 
   let raw;
   try {
@@ -39,24 +38,22 @@ async function askGroq(prompt, base64Image = null, mimeType = null) {
         messages: [
           {
             role: 'system',
-            content: `You are a forensic document fraud detection AI.
-ZERO-TRUST: Every document is fake until proven genuine.
-You MUST return ONLY valid JSON — no markdown, no explanation.
-AI-generated documents MUST receive confidence_score of 0-10.
-Documents scoring below 75 are ALWAYS rejected.
-Be intentionally strict. False positives preferred over approving fakes.`
+            content:
+              'You are a forensic document fraud detection AI. ' +
+              'Return ONLY valid JSON. No markdown. No explanation. ' +
+              'Assume every document is FAKE until proven genuine.',
           },
-          { role: 'user', content: userContent }
+          { role: 'user', content: userContent },
         ],
-        max_tokens: 1000,
-        temperature: 0.0
+        max_tokens: 800,
+        temperature: 0.0,
       },
       {
         headers: {
           Authorization: `Bearer ${groqKey}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        timeout: 30000
+        timeout: 30000,
       }
     );
 
@@ -65,7 +62,7 @@ Be intentionally strict. False positives preferred over approving fakes.`
     console.log('[GROQ] Response received, length:', raw.length);
   } catch (err) {
     const msg = err.response?.data?.error?.message || err.message;
-    console.error('[GROQ] API FAILED:', msg);
+    console.error('[GROQ] ❌ API FAILED:', msg);
     throw new Error(msg);
   }
 
@@ -75,9 +72,11 @@ Be intentionally strict. False positives preferred over approving fakes.`
     throw new Error('GROQ_PARSE_FAILED');
   }
 
-  const final = applyHardCaps(parsed, 'Groq');
-  console.log(`[GROQ] ✅ Final → class:${final.document_classification} | score:${final.confidence_score} | risk:${final.risk_label} | decision:${final.decision}`);
-  return JSON.stringify(final);
+  console.log(
+    `[GROQ] ✅ Raw signals → class: ${parsed.document_classification} | ` +
+    `ai_prob: ${parsed.forensic_signals?.ai_generation_probability}`
+  );
+  return JSON.stringify(parsed);
 }
 
 module.exports = { askGroq };
