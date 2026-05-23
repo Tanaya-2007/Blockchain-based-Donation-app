@@ -1,61 +1,11 @@
-const { GoogleGenerativeAI, SchemaType } = require('@google/generative-ai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// ── Models ordered by free-tier availability in 2026 ─────────────────────────
 const MODEL_CASCADE = [
-  'gemini-2.5-flash-preview-05-20',
-  'gemini-2.5-flash-preview-04-17',
-  'gemini-2.0-flash-lite',
   'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
 ];
 
-// ── responseSchema — forces Gemini to return EXACT JSON structure ─────────────
-// No more parse failures. No more markdown wrappers. Zero ambiguity.
-const RESPONSE_SCHEMA = {
-  type: SchemaType.OBJECT,
-  properties: {
-    document_classification: {
-      type: SchemaType.STRING,
-      enum: ['correct_document','wrong_document','ai_generated_image',
-             'screenshot','code_image','unrelated_image','blank'],
-    },
-    is_relevant:      { type: SchemaType.BOOLEAN },
-    matches_campaign: { type: SchemaType.BOOLEAN },
-    fraud_detected:   { type: SchemaType.BOOLEAN },
-    forensic_signals: {
-      type: SchemaType.OBJECT,
-      properties: {
-        has_paper_texture:               { type: SchemaType.BOOLEAN },
-        has_scan_artifacts:              { type: SchemaType.BOOLEAN },
-        has_natural_imperfections:       { type: SchemaType.BOOLEAN },
-        has_ink_variation:               { type: SchemaType.BOOLEAN },
-        has_realistic_shadows:           { type: SchemaType.BOOLEAN },
-        text_looks_printed_not_rendered: { type: SchemaType.BOOLEAN },
-        background_is_smooth_gradient:   { type: SchemaType.BOOLEAN },
-        lighting_is_too_perfect:         { type: SchemaType.BOOLEAN },
-        fonts_are_perfectly_uniform:     { type: SchemaType.BOOLEAN },
-        is_ai_generated:                 { type: SchemaType.BOOLEAN },
-        ai_generation_probability:       { type: SchemaType.INTEGER },
-        tampering_probability:           { type: SchemaType.INTEGER },
-      },
-      required: [
-        'has_paper_texture','has_scan_artifacts','has_natural_imperfections',
-        'has_ink_variation','text_looks_printed_not_rendered',
-        'background_is_smooth_gradient','lighting_is_too_perfect',
-        'fonts_are_perfectly_uniform','is_ai_generated',
-        'ai_generation_probability','tampering_probability',
-      ],
-    },
-    red_flags: { type: SchemaType.ARRAY,  items: { type: SchemaType.STRING } },
-    reason:    { type: SchemaType.STRING },
-  },
-  required: [
-    'document_classification','is_relevant','matches_campaign',
-    'fraud_detected','forensic_signals','red_flags','reason',
-  ],
-};
-
-// ── Per-session quota cache — skip dead combos without wasting time ───────────
-const quotaDead = new Set();
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 function getGeminiKeys() {
   const keys = [
@@ -69,129 +19,125 @@ function getGeminiKeys() {
   return unique;
 }
 
-// ── Parse Google's retryDelay from error JSON ─────────────────────────────────
-// Error body contains: {"@type":"...RetryInfo","retryDelay":"57s"}
-function parseRetryDelay(err) {
+function safeParse(text) {
+  if (!text) return null;
   try {
-    const body = err?.response?.data || err?.errorDetails || err?.message || '';
-    const str  = typeof body === 'string' ? body : JSON.stringify(body);
-    // Match "retryDelay":"57s" or "retry_delay":"57s"
-    const m = str.match(/"retryDelay"\s*:\s*"(\d+)s"/i)
-           || str.match(/"retry_delay"\s*:\s*"(\d+)s"/i)
-           || str.match(/retry[_\s]?in[:\s]+(\d+)s/i);
-    if (m) return (parseInt(m[1]) + 2) * 1000; // add 2s buffer
-  } catch {}
-  return 8000; // default 8s if we can't parse
+    const cleaned = text.replace(/```json\s*/gi,'').replace(/```\s*/g,'').trim();
+    const match   = cleaned.match(/\{[\s\S]*\}/);
+    return JSON.parse(match ? match[0] : cleaned);
+  } catch { return null; }
 }
 
-function classifyErr(err) {
-  const msg  = (err?.message || '').toLowerCase();
-  const body = JSON.stringify(err?.response?.data || '').toLowerCase();
-  const full = msg + body;
+// FIX: handle decimal seconds like "57.955341022s"
+function parseRetryDelay(msg) {
+  const m = (msg || '').match(/retry in (\d+(?:\.\d+)?)s/i);
+  if (m) {
+    const secs = Math.ceil(parseFloat(m[1]));
+    console.log(`[GEMINI] Google says retry in ${secs}s — will wait ${secs + 2}s`);
+    return (secs + 2) * 1000; // +2s buffer
+  }
+  return 65000; // safe default
+}
+
+function classifyErr(msg) {
+  const m = (msg || '').toLowerCase();
   return {
-    isQuota:     full.includes('429') || full.includes('quota') ||
-                 full.includes('resource_exhausted') || full.includes('rate limit') ||
-                 full.includes('too many requests'),
-    isKeyDead:   full.includes('api_key_invalid') || full.includes('api key not valid') ||
-                 full.includes('permission denied') || full.includes('403') ||
-                 full.includes('expired') || full.includes('api key'),
-    isModelGone: full.includes('not found') || full.includes('404') ||
-                 full.includes('deprecated') || full.includes('is not supported') ||
-                 full.includes('does not exist') || full.includes('not exist'),
-    isTooLong:   full.includes('400') && (full.includes('token') || full.includes('too long') || full.includes('payload')),
+    isQuota:     m.includes('429') || m.includes('quota') ||
+                 m.includes('resource_exhausted') || m.includes('rate limit') ||
+                 m.includes('too many requests'),
+    isKeyDead:   m.includes('api_key_invalid') || m.includes('api key not valid') ||
+                 m.includes('permission denied') || m.includes('403') || m.includes('expired'),
+    isModelGone: m.includes('not found') || m.includes('404') ||
+                 m.includes('deprecated') || m.includes('is not supported'),
   };
 }
 
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
+// Per-session cache: key+model combos that are quota-dead right now
+// Value = timestamp when they become available again
+const availableAt = {};
 
-// ── Core request ──────────────────────────────────────────────────────────────
-async function callGemini(apiKey, modelName, prompt, base64Image, mimeType) {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({
-    model: modelName,
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema:   RESPONSE_SCHEMA,   // ← structured output
-      temperature:      0.0,               // fully deterministic
-    },
-  });
-
-  const parts = [];
-  if (base64Image && mimeType) {
-    parts.push({ inlineData: { data: base64Image, mimeType } });
-  }
-  parts.push({ text: prompt });
-
-  const result = await model.generateContent(parts);
-  const text   = result.response.text();
-  if (!text?.trim()) throw new Error('EMPTY_RESPONSE');
-
-  // With responseSchema, Gemini returns clean JSON — direct parse
-  return JSON.parse(text);
-}
-
-// ── Main exported function ────────────────────────────────────────────────────
 async function askGemini(prompt, base64Image = null, mimeType = null) {
   const keys = getGeminiKeys();
   if (keys.length === 0) throw new Error('GEMINI_KEY_MISSING');
 
-  for (let ki = 0; ki < keys.length; ki++) {
-    let keyDead = false;
+  // We do up to 2 full passes. On the 2nd pass we wait for the shortest
+  // rate-limit window before retrying.
+  for (let pass = 0; pass < 2; pass++) {
 
-    for (const modelName of MODEL_CASCADE) {
-      if (keyDead) break;
+    // Find the soonest-available combo
+    const now = Date.now();
+    let shortestWait = Infinity;
 
-      const cacheKey = `k${ki}_${modelName}`;
-      if (quotaDead.has(cacheKey)) {
-        console.log(`[GEMINI] ⏭  Skip cached quota-dead: Key${ki+1}+${modelName}`);
-        continue;
-      }
+    for (let ki = 0; ki < keys.length; ki++) {
+      for (const modelName of MODEL_CASCADE) {
+        const key = `k${ki}_${modelName}`;
+        const avail = availableAt[key] || 0;
+        if (avail > now) {
+          shortestWait = Math.min(shortestWait, avail - now);
+          continue; // still cooling down
+        }
 
-      // ── Retry loop: up to 2 attempts with Google's own retryDelay ────────
-      for (let attempt = 1; attempt <= 2; attempt++) {
+        // Try this combo
         try {
-          console.log(`[GEMINI] ▶ Key${ki+1} | ${modelName} | attempt ${attempt}`);
-          const parsed = await callGemini(
-            keys[ki], modelName, prompt, base64Image, mimeType
-          );
-          console.log(`[GEMINI] ✅ SUCCESS Key${ki+1}+${modelName} | class:${parsed.document_classification} | ai_prob:${parsed.forensic_signals?.ai_generation_probability}`);
+          const genAI = new GoogleGenerativeAI(keys[ki]);
+          const model = genAI.getGenerativeModel({
+            model: modelName,
+            generationConfig: { responseMimeType: 'application/json', temperature: 0.0 },
+          });
+
+          const parts = [];
+          if (base64Image && mimeType) parts.push({ inlineData: { data: base64Image, mimeType } });
+          parts.push({ text: prompt });
+
+          console.log(`[GEMINI] ▶ Key${ki+1} | ${modelName} | pass ${pass+1}`);
+          const result = await model.generateContent(parts);
+          const text   = result.response.text();
+          if (!text?.trim()) throw new Error('EMPTY_RESPONSE');
+
+          const parsed = safeParse(text);
+          if (!parsed) throw new Error('PARSE_FAILED: ' + text.slice(0, 80));
+
+          delete availableAt[key]; // clear any old rate-limit record
+          console.log(`[GEMINI] ✅ SUCCESS Key${ki+1}+${modelName} | class:${parsed.document_classification}`);
           return JSON.stringify(parsed);
 
         } catch (err) {
-          const { isQuota, isKeyDead, isModelGone, isTooLong } = classifyErr(err);
-          console.error(`[GEMINI] ❌ Key${ki+1}|${modelName}|attempt${attempt}: ${(err.message||'').slice(0,100)}`);
+          const msg = err.message || '';
+          const { isQuota, isKeyDead, isModelGone } = classifyErr(msg);
+          console.error(`[GEMINI] ❌ Key${ki+1}|${modelName}: ${msg.slice(0, 200)}`);
 
           if (isKeyDead) {
-            console.warn(`[GEMINI] 🔑 Key${ki+1} is DEAD — skipping all its models`);
-            keyDead = true;
-            break;
+            // Mark all models for this key as unavailable for 24h
+            for (const m of MODEL_CASCADE) availableAt[`k${ki}_${m}`] = now + 86400000;
+            console.warn(`[GEMINI] Key${ki+1} is dead — skipping`);
+            break; // break model loop, try next key
           }
 
-          if (isModelGone || isTooLong) {
-            console.log(`[GEMINI] Model ${modelName} unavailable — trying next model`);
-            break; // next model
+          if (isModelGone) {
+            availableAt[key] = now + 86400000;
+            continue; // try next model
           }
 
           if (isQuota) {
-            if (attempt === 1) {
-              const waitMs = parseRetryDelay(err);
-              console.log(`[GEMINI] ⏳ Rate-limited. Waiting ${waitMs}ms (Google's retryDelay)...`);
-              await sleep(waitMs);
-              continue; // retry same model
-            } else {
-              // Still failing after wait → mark dead for this session
-              quotaDead.add(cacheKey);
-              console.log(`[GEMINI] Quota confirmed dead: Key${ki+1}+${modelName}`);
-              break; // next model
-            }
+            const waitMs = parseRetryDelay(msg);
+            availableAt[key] = now + waitMs;
+            shortestWait = Math.min(shortestWait, waitMs);
+            console.log(`[GEMINI] Key${ki+1}|${modelName} rate-limited for ${Math.ceil(waitMs/1000)}s`);
+            continue; // try next model/key
           }
 
-          // Any other error → try next model
-          break;
+          continue; // other error → try next
         }
       }
+    }
+
+    // End of pass — check if we should wait and retry
+    if (pass === 0 && shortestWait < Infinity && shortestWait < 120000) {
+      console.log(`[GEMINI] All combos rate-limited. Waiting ${Math.ceil(shortestWait/1000)}s then retrying...`);
+      await sleep(shortestWait + 500);
+      // Continue to pass 1
+    } else {
+      break; // no point retrying
     }
   }
 
