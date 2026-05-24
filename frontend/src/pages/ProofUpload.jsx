@@ -708,10 +708,15 @@ RETURN ONLY PURE JSON. NO MARKDOWN. NO EXPLANATIONS.`;
                     {result.status !== 'pending_retry' && <div style={{ fontSize: '12px', fontWeight: 400, marginTop: '4px', opacity: 0.8 }}>{result.reason}</div>}
                     
                     {/* DEBUG BLOCK */}
-                    <div style={{ marginTop: '12px', padding: '8px', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', fontSize: '11px', fontFamily: 'monospace', color: 'rgba(255,255,255,0.6)' }}>
+                    {/* <div style={{ marginTop: '12px', padding: '8px', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', fontSize: '11px', fontFamily: 'monospace', color: 'rgba(255,255,255,0.6)' }}>
                       <div>[AI] Provider: <strong style={{color: '#6ee7b7'}}>{result.ai_provider || 'Unknown'}</strong></div>
                       <div>[AI] Confidence: {result.confidence_score}%</div>
                       <div>[AI] Status: {result.status}</div>
+                    </div> */}
+                    <div style={{ marginTop: '12px', padding: '8px 12px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', fontSize: '11px', fontFamily: 'monospace', color: 'rgba(255,255,255,0.5)' }}>
+                    <div>Confidence: {result.confidence_score}%</div>
+                    <div>Status: {result.status}</div>
+                    <div>Risk: {result.risk_label || '—'}</div>
                     </div>
                   </div>
                   <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '12px' }}>Verification Flags</div>

@@ -1,9 +1,10 @@
 const express = require('express');
-const router = express.Router();
+const router  = express.Router();
 const { verifyDocument } = require('../services/ai/verifier');
 
 router.post('/messages', async (req, res) => {
-  console.log("AI REQUEST RECEIVED in /api/ai/messages");
+  // Only log in terminal — never expose to browser
+  console.log('[AI] Request received in /api/ai/messages');
 
   try {
     const messages = req.body.messages;
@@ -12,9 +13,9 @@ router.post('/messages', async (req, res) => {
     }
 
     const contentArray = messages[0].content;
-    let promptText = '';
+    let promptText  = '';
     let base64Image = null;
-    let mimeType = null;
+    let mimeType    = null;
 
     if (Array.isArray(contentArray)) {
       for (const part of contentArray) {
@@ -22,7 +23,7 @@ router.post('/messages', async (req, res) => {
           promptText = part.text;
         } else if (part.type === 'image' && part.source?.type === 'base64') {
           base64Image = part.source.data;
-          mimeType = part.source.media_type;
+          mimeType    = part.source.media_type;
         }
       }
     } else if (typeof contentArray === 'string') {
@@ -33,23 +34,36 @@ router.post('/messages', async (req, res) => {
       return res.status(400).json({ error: 'Missing prompt text' });
     }
 
-    const parsedJson = await verifyDocument(promptText, base64Image, mimeType);
+    const result = await verifyDocument(promptText, base64Image, mimeType);
 
-    // Return exact format frontend expects (Anthropic style wrapper, or direct)
-    // The frontend currently expects Anthropic style wrapper: { content: [{ text: "..." }] }
+    // ── Log full result to terminal only ──────────────────────────────────
+    console.log(`[AI] ✅ Verification done | provider: ${result.ai_provider} | score: ${result.confidence_score} | decision: ${result.decision}`);
+
+    // ── Strip ai_provider before sending to frontend ──────────────────────
+    // Judges/users will never see which model ran — only terminal knows
+    const { ai_provider, ...safeResult } = result;
+
+    // Add a generic label so the UI still shows something meaningful
+    safeResult.ai_provider = 'TransparentFund AI';
+
     return res.json({
-      content: [{ text: JSON.stringify(parsedJson) }]
+      content: [{ text: JSON.stringify(safeResult) }]
     });
 
   } catch (err) {
-    console.error("FATAL ROUTE ERROR:", err.message);
+    console.error('[AI] FATAL ERROR:', err.message);
     return res.json({
       content: [{ text: JSON.stringify({
-        status: "pending_retry",
-        confidence_score: 0,
-        document_type: "api_error",
-        reason: "Critical server error. Verification delayed.",
-        decision: "pending_retry"
+        status:                  'pending_retry',
+        confidence_score:        0,
+        risk_label:              'HIGH_RISK_FRAUD',
+        document_classification: 'unknown',
+        decision:                'pending_retry',
+        reason:                  'Verification temporarily unavailable. Queued for retry.',
+        ai_provider:             'TransparentFund AI',
+        is_relevant:             true,
+        matches_campaign:        true,
+        fraud_detected:          false,
       }) }]
     });
   }
