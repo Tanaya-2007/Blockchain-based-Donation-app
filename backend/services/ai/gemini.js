@@ -1,6 +1,17 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+// Uses BOTH v1 (stable) and v1beta endpoints + all 4 keys
+// v1 models (gemini-1.5-*) have SEPARATE quota from v1beta models (gemini-2.0-*)
+// This doubles the available quota and bypasses India's v1beta restrictions
+const https = require('https');
 
-const MODEL_CASCADE = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+// Try v1 FIRST — gemini-1.5-* models, separate quota bucket, works in India
+// Then v1beta as fallback
+const COMBOS = [
+  { api: 'v1',     model: 'gemini-1.5-flash'     },
+  { api: 'v1',     model: 'gemini-1.5-flash-8b'  },
+  { api: 'v1',     model: 'gemini-1.5-pro'        },
+  { api: 'v1beta', model: 'gemini-2.0-flash'      },
+  { api: 'v1beta', model: 'gemini-2.0-flash-lite' },
+];
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -12,7 +23,7 @@ function getKeys() {
     process.env.GEMINI_API_KEY_4,
   ].filter(Boolean);
   const unique = [...new Set(keys)];
-  console.log(`[GEMINI] ${unique.length} key(s) in .env`);
+  console.log(`[GEMINI] ${unique.length} key(s) loaded`);
   return unique;
 }
 
@@ -25,13 +36,62 @@ function safeParse(text) {
   } catch { return null; }
 }
 
-// Parse "retry in 57.955s" → 60000 ms
-function retryDelay(msg) {
+function parseRetryDelay(msg) {
   const m = (msg||'').match(/retry in (\d+(?:\.\d+)?)s/i);
   return m ? (Math.ceil(parseFloat(m[1])) + 3) * 1000 : 65000;
 }
 
-const dead = new Map(); // cacheKey → timestamp when available again
+// Direct HTTPS call — no SDK, no version dependency
+function callGeminiRaw(apiKey, api, model, prompt, base64Image, mimeType) {
+  return new Promise((resolve, reject) => {
+    const parts = [];
+    if (base64Image && mimeType) {
+      parts.push({ inline_data: { mime_type: mimeType, data: base64Image } });
+    }
+    parts.push({ text: prompt });
+
+    const body = JSON.stringify({
+      contents: [{ parts }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.0 },
+    });
+
+    const req = https.request({
+      hostname: 'generativelanguage.googleapis.com',
+      path: `/${api}/models/${model}:generateContent?key=${apiKey}`,
+      method: 'POST',
+      headers: {
+        'Content-Type':   'application/json',
+        'Content-Length': Buffer.byteLength(body),
+      },
+      timeout: 30000,
+    }, res => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (res.statusCode === 200) {
+            // Extract text from Gemini response structure
+            const text = json?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            resolve({ ok: true, text });
+          } else {
+            const msg  = json?.error?.message || data.slice(0, 300);
+            const code = json?.error?.status  || String(res.statusCode);
+            reject(Object.assign(new Error(msg), { httpStatus: res.statusCode, googleStatus: code }));
+          }
+        } catch(e) { reject(new Error('PARSE_HTTP_RESPONSE: ' + data.slice(0,100))); }
+      });
+    });
+
+    req.on('error',   e => reject(e));
+    req.on('timeout', () => { req.destroy(); reject(new Error('TIMEOUT')); });
+    req.write(body);
+    req.end();
+  });
+}
+
+// Per-session cooldown cache: key → timestamp when available again
+const cooldown = new Map();
 
 async function askGemini(prompt, base64Image = null, mimeType = null) {
   const keys = getKeys();
@@ -39,62 +99,56 @@ async function askGemini(prompt, base64Image = null, mimeType = null) {
 
   for (let pass = 0; pass < 2; pass++) {
     const now = Date.now();
-    let minWait = Infinity;
-    let attempted = false;
+    let minWait   = Infinity;
+    let anyTried  = false;
 
     for (let ki = 0; ki < keys.length; ki++) {
-      for (const modelName of MODEL_CASCADE) {
-        const ck = `k${ki}_${modelName}`;
-        const avail = dead.get(ck) || 0;
+      for (const { api, model } of COMBOS) {
+        const ck     = `k${ki}_${api}_${model}`;
+        const avail  = cooldown.get(ck) || 0;
 
         if (avail > now) {
           minWait = Math.min(minWait, avail - now);
-          console.log(`[GEMINI] skip (cooldown ${Math.ceil((avail-now)/1000)}s): Key${ki+1}+${modelName}`);
           continue;
         }
 
-        attempted = true;
+        anyTried = true;
         try {
-          const genAI = new GoogleGenerativeAI(keys[ki]);
-          const model = genAI.getGenerativeModel({
-            model: modelName,
-            generationConfig: { responseMimeType: 'application/json', temperature: 0.0 },
-          });
-
-          const parts = [];
-          if (base64Image && mimeType) parts.push({ inlineData: { data: base64Image, mimeType } });
-          parts.push({ text: prompt });
-
-          console.log(`[GEMINI] ▶ Key${ki+1} | ${modelName} | pass${pass+1}`);
-          const result = await model.generateContent(parts);
-          const text   = result.response.text();
+          console.log(`[GEMINI] ▶ Key${ki+1} | /${api}/${model} | pass${pass+1}`);
+          const { text } = await callGeminiRaw(keys[ki], api, model, prompt, base64Image, mimeType);
           if (!text?.trim()) throw new Error('EMPTY_RESPONSE');
 
           const parsed = safeParse(text);
-          if (!parsed) throw new Error('PARSE_FAILED: ' + text.slice(0,60));
+          if (!parsed) throw new Error('PARSE_FAILED: ' + text.slice(0, 60));
 
-          dead.delete(ck);
-          console.log(`[GEMINI] ✅ Key${ki+1}+${modelName} | class:${parsed.document_classification}`);
+          cooldown.delete(ck);
+          console.log(`[GEMINI] ✅ Key${ki+1}+${model} | class:${parsed.document_classification}`);
           return JSON.stringify(parsed);
 
         } catch (err) {
-          const msg = (err.message || '').toLowerCase();
-          console.error(`[GEMINI] ❌ Key${ki+1}+${modelName}: ${err.message.slice(0,150)}`);
+          const msg  = err.message || '';
+          const http = err.httpStatus || 0;
+          const gst  = (err.googleStatus || '').toLowerCase();
+          console.error(`[GEMINI] ❌ Key${ki+1}|/${api}/${model}: ${msg.slice(0,160)}`);
 
-          const isQuota    = msg.includes('429') || msg.includes('quota') || msg.includes('resource_exhausted');
-          const isKeyDead  = msg.includes('api_key') || msg.includes('403') || msg.includes('permission');
-          const isGone     = msg.includes('404') || msg.includes('not found') || msg.includes('deprecated');
+          const isQuota   = http===429 || gst.includes('resource_exhausted') ||
+                            msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('429');
+          const isKeyDead = http===403 || gst.includes('permission_denied') ||
+                            msg.toLowerCase().includes('api_key_invalid') || msg.toLowerCase().includes('api key not valid');
+          const isGone    = http===404 || gst.includes('not_found') ||
+                            msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('deprecated');
 
           if (isKeyDead) {
-            MODEL_CASCADE.forEach(m => dead.set(`k${ki}_${m}`, now + 86400000));
+            COMBOS.forEach(c => cooldown.set(`k${ki}_${c.api}_${c.model}`, now + 86400000));
+            console.warn(`[GEMINI] Key${ki+1} dead`);
             break;
           }
-          if (isGone)  { dead.set(ck, now + 86400000); continue; }
+          if (isGone)  { cooldown.set(ck, now + 86400000); continue; }
           if (isQuota) {
-            const wait = retryDelay(err.message);
-            dead.set(ck, now + wait);
+            const wait = parseRetryDelay(msg);
+            cooldown.set(ck, now + wait);
             minWait = Math.min(minWait, wait);
-            console.log(`[GEMINI] rate-limited ${Math.ceil(wait/1000)}s — trying next combo`);
+            console.log(`[GEMINI] Key${ki+1}+${model} rate-limited ~${Math.ceil(wait/1000)}s`);
             continue;
           }
           continue;
@@ -102,11 +156,10 @@ async function askGemini(prompt, base64Image = null, mimeType = null) {
       }
     }
 
-    if (pass === 0 && !attempted && minWait < 130000) {
-      console.log(`[GEMINI] all combos cooling. Waiting ${Math.ceil(minWait/1000)}s...`);
+    // If everything was rate-limited and shortest wait < 2 min, wait and retry once
+    if (!anyTried && minWait < 130000 && pass === 0) {
+      console.log(`[GEMINI] All rate-limited. Waiting ${Math.ceil(minWait/1000)}s...`);
       await sleep(minWait + 500);
-    } else if (!attempted) {
-      break;
     } else {
       break;
     }
