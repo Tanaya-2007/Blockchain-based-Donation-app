@@ -69,20 +69,20 @@ function uploadToCloudinary(file, onProgress) {
 }
 
 const MS_STYLE = {
-  verified:             { border: '1px solid rgba(16,185,129,0.4)',  background: 'rgba(16,185,129,0.06)',  color: '#6ee7b7'              },
-  approved:             { border: '1px solid rgba(16,185,129,0.4)',  background: 'rgba(16,185,129,0.06)',  color: '#6ee7b7'              },
-  pending_admin_review: { border: '1px solid rgba(245,158,11,0.45)', background: 'rgba(245,158,11,0.08)', color: '#fcd34d'              },
-  pending:              { border: '1px solid rgba(124,58,237,0.45)', background: 'rgba(124,58,237,0.1)',  color: '#c4b5fd'              },
-  locked:               { border: '1px solid rgba(255,255,255,0.08)',background: 'rgba(255,255,255,0.03)',color: 'rgba(255,255,255,0.3)'},
-  rejected:             { border: '1px solid rgba(239,68,68,0.35)',  background: 'rgba(239,68,68,0.06)',  color: '#fca5a5'              },
+  verified:             { border:'1px solid rgba(16,185,129,0.4)',  background:'rgba(16,185,129,0.06)',  color:'#6ee7b7' },
+  approved:             { border:'1px solid rgba(16,185,129,0.4)',  background:'rgba(16,185,129,0.06)',  color:'#6ee7b7' },
+  pending_admin_review: { border:'1px solid rgba(245,158,11,0.45)', background:'rgba(245,158,11,0.08)', color:'#fcd34d' },
+  pending:              { border:'1px solid rgba(124,58,237,0.45)', background:'rgba(124,58,237,0.1)',  color:'#c4b5fd' },
+  locked:               { border:'1px solid rgba(255,255,255,0.08)',background:'rgba(255,255,255,0.03)',color:'rgba(255,255,255,0.3)' },
+  rejected:             { border:'1px solid rgba(239,68,68,0.35)',  background:'rgba(239,68,68,0.06)',  color:'#fca5a5' },
 };
 const PILL = {
-  verified:             { background: 'rgba(16,185,129,0.15)',  color: '#6ee7b7',              border: '1px solid rgba(16,185,129,0.3)'  },
-  approved:             { background: 'rgba(16,185,129,0.15)',  color: '#6ee7b7',              border: '1px solid rgba(16,185,129,0.3)'  },
-  pending_admin_review: { background: 'rgba(245,158,11,0.15)', color: '#fcd34d',              border: '1px solid rgba(245,158,11,0.3)' },
-  pending:              { background: 'rgba(245,158,11,0.15)', color: '#fcd34d',              border: '1px solid rgba(245,158,11,0.3)' },
-  locked:               { background: 'rgba(255,255,255,0.05)',color: 'rgba(255,255,255,0.3)',border: '1px solid rgba(255,255,255,0.08)'},
-  rejected:             { background: 'rgba(239,68,68,0.15)',  color: '#fca5a5',              border: '1px solid rgba(239,68,68,0.3)'  },
+  verified:             { background:'rgba(16,185,129,0.15)',  color:'#6ee7b7',              border:'1px solid rgba(16,185,129,0.3)'  },
+  approved:             { background:'rgba(16,185,129,0.15)',  color:'#6ee7b7',              border:'1px solid rgba(16,185,129,0.3)'  },
+  pending_admin_review: { background:'rgba(245,158,11,0.15)', color:'#fcd34d',              border:'1px solid rgba(245,158,11,0.3)' },
+  pending:              { background:'rgba(245,158,11,0.15)', color:'#fcd34d',              border:'1px solid rgba(245,158,11,0.3)' },
+  locked:               { background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.3)',border:'1px solid rgba(255,255,255,0.08)' },
+  rejected:             { background:'rgba(239,68,68,0.15)',  color:'#fca5a5',              border:'1px solid rgba(239,68,68,0.3)'  },
 };
 
 function getPillLabel(status) {
@@ -95,11 +95,11 @@ function getPillLabel(status) {
 
 export default function ProofUpload({ onToast }) {
   const { user } = useAuth();
-  const fileRef = useRef();
+  const fileRef  = useRef();
 
-  const [campaigns,     setCampaigns]     = useState([]);
-  const [selCampaign,   setSelCampaign]   = useState(null);
-  const [loadingCamps,  setLoadingCamps]  = useState(true);
+  const [campaigns,       setCampaigns]       = useState([]);
+  const [selCampaign,     setSelCampaign]     = useState(null);
+  const [loadingCamps,    setLoadingCamps]    = useState(true);
   const [submittedProofs, setSubmittedProofs] = useState({});
 
   const [uploaded,  setUploaded]  = useState([]);
@@ -137,7 +137,11 @@ export default function ProofUpload({ onToast }) {
           if (!p.campaignId || p.milestoneNo == null) return;
           const key = `${String(p.campaignId)}_${String(p.milestoneNo)}`;
           if (!proofMap[key]) {
-            proofMap[key] = { milestoneNo: Number(p.milestoneNo), status: p.status, aiScore: p.aiScore };
+            proofMap[key] = {
+              milestoneNo: Number(p.milestoneNo),
+              status:  p.status,
+              aiScore: p.aiScore,
+            };
           }
         });
         setSubmittedProofs(proofMap);
@@ -164,19 +168,20 @@ export default function ProofUpload({ onToast }) {
     }
   };
 
-  // ── Save proof to Firestore ───────────────────────────────────────────────
+  // ── Save proof ────────────────────────────────────────────────────────────
   const saveProof = async (fileUrls, aiResult, finalStatus) => {
     if (!selCampaign) return;
     const currentMs = selCampaign.currentMilestone || 1;
 
     if (aiResult?.decision === 'pending_retry' || finalStatus === 'pending_retry') {
       const key = `${String(selCampaign.id)}_${String(currentMs)}`;
-      setSubmittedProofs(prev => ({ ...prev, [key]: { milestoneNo: currentMs, status: 'pending_retry', aiScore: aiResult?.confidence_score } }));
+      setSubmittedProofs(prev => ({
+        ...prev,
+        [key]: { milestoneNo: currentMs, status: 'pending_retry', aiScore: aiResult?.confidence_score },
+      }));
       return;
     }
 
-    // ✅ Save rejected proofs too — so NGO can see history
-    // But DO NOT lock milestone for rejected proofs
     await addDoc(collection(db, 'proofs'), {
       campaignId:    selCampaign.id,
       campaignTitle: selCampaign.title || '',
@@ -193,13 +198,12 @@ export default function ProofUpload({ onToast }) {
     });
 
     if (finalStatus === 'pending_admin_review') {
-      // Update campaign milestones only when going to admin review
       const msIndex = currentMs - 1;
       const updatedMilestones = normalizeMilestones(selCampaign.milestones).map((m, i) =>
         i === msIndex ? { ...m, status: 'verified' } : m
       );
       await updateDoc(doc(db, 'campaigns', selCampaign.id), {
-        milestones: updatedMilestones,
+        milestones:       updatedMilestones,
         currentMilestone: currentMs + 1,
       });
       const updateCamp = camp => ({
@@ -216,19 +220,19 @@ export default function ProofUpload({ onToast }) {
     const key = `${String(selCampaign.id)}_${String(currentMs)}`;
     setSubmittedProofs(prev => ({
       ...prev,
-      [key]: { milestoneNo: currentMs, status: finalStatus, aiScore: aiResult?.confidence_score }
+      [key]: { milestoneNo: currentMs, status: finalStatus, aiScore: aiResult?.confidence_score },
     }));
   };
 
-  // ── Main verification ─────────────────────────────────────────────────────
+  // ── Verification ──────────────────────────────────────────────────────────
   const runVerification = async () => {
-    if (fileObjs.length === 0)  { onToast('No file uploaded', 'error'); return; }
-    if (!selCampaign)           { onToast('Select a campaign first', 'error'); return; }
+    if (fileObjs.length === 0) { onToast('No file uploaded', 'error'); return; }
+    if (!selCampaign)          { onToast('Select a campaign first', 'error'); return; }
 
     const allowed = ['image/jpeg','image/jpg','image/png','image/webp','application/pdf'];
     for (const file of fileObjs) {
-      if (file.size < 5120)               { onToast(`File ${file.name} is too small (<5KB).`, 'error'); return; }
-      if (!allowed.includes(file.type))   { onToast('Only JPG, PNG, WEBP, or PDF allowed.', 'error'); return; }
+      if (file.size < 5120)             { onToast(`File ${file.name} too small (<5KB).`, 'error'); return; }
+      if (!allowed.includes(file.type)) { onToast('Only JPG, PNG, WEBP, or PDF allowed.', 'error'); return; }
     }
 
     setUploading(true); setUploadPct(0);
@@ -244,104 +248,83 @@ export default function ProofUpload({ onToast }) {
     setUploading(false); setUploadPct(100);
     setVerifying(true); setResult(null);
 
-    const ms    = selCampaign.currentMilestone || 1;
-    const msList = normalizeMilestones(selCampaign.milestones);
-    const msAmt  = msList[ms - 1]?.amount || 0;
-
-    // ✅ Send ONLY campaign context — backend builds the full forensic prompt
-    // This is the fix: no more double-wrapping that caused Gemini 400 errors
-    const campaignContext = `Campaign: "${selCampaign.title}" | Milestone ${ms} | Amount: ₹${msAmt.toLocaleString('en-IN')}`;
+    const ms      = selCampaign.currentMilestone || 1;
+    const msList  = normalizeMilestones(selCampaign.milestones);
+    const msAmt   = msList[ms - 1]?.amount || 0;
+    const context = `Campaign: "${selCampaign.title}" | Milestone ${ms} | Amount: ₹${msAmt.toLocaleString('en-IN')}`;
 
     let aiResult = null;
     try {
       if (imgBase64) {
         const content = [
-          { type: 'image', source: { type: 'base64', media_type: imgType, data: imgBase64 } },
-          { type: 'text', text: campaignContext },
+          { type:'image', source:{ type:'base64', media_type:imgType, data:imgBase64 } },
+          { type:'text', text:context },
         ];
-        const res = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/ai/messages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: [{ role: 'user', content }]
-          }),
+        const res  = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/ai/messages`, {
+          method:'POST', headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ messages:[{ role:'user', content }] }),
         });
-        const data = await res.json();
-        const raw  = data.content?.[0]?.text ?? '{}';
+        const data  = await res.json();
+        const raw   = data.content?.[0]?.text ?? '{}';
         const match = raw.match(/\{[\s\S]*\}/);
         aiResult = JSON.parse(match ? match[0] : raw);
       } else {
-        // PDF — cannot do vision analysis
         aiResult = {
-          status: 'rejected',
-          confidence_score: 30,
-          reason: 'PDF files cannot be visually verified. Please upload a JPG or PNG photo of the document.',
-          is_relevant: true,
-          matches_campaign: true,
-          fraud_detected: false,
-          decision: 'reject',
-          risk_label: 'LOW_TRUST',
+          status:'rejected', confidence_score:30, decision:'reject', risk_label:'LOW_TRUST',
+          reason:'PDF cannot be visually verified. Upload a JPG or PNG photo.',
+          is_relevant:true, matches_campaign:true, fraud_detected:false,
         };
       }
-    } catch (error) {
-      console.error('Error in runVerification:', error);
+    } catch {
       aiResult = {
-        status: 'pending_retry',
-        confidence_score: 0,
-        reason: 'AI verification temporarily unavailable. Queued for retry.',
-        is_relevant: true,
-        matches_campaign: true,
-        fraud_detected: false,
-        decision: 'pending_retry',
-        risk_label: 'HIGH_RISK_FRAUD',
+        status:'pending_retry', confidence_score:0, decision:'pending_retry',
+        risk_label:'HIGH_RISK_FRAUD',
+        reason:'AI verification temporarily unavailable.',
+        is_relevant:true, matches_campaign:true, fraud_detected:false,
       };
     }
 
     const score = aiResult.confidence_score ?? 0;
-
-    // ✅ Threshold: 75+ = admin review, below = rejected
     let finalStatus;
-    if (aiResult.decision === 'pending_retry' || aiResult.status === 'pending_retry') {
-      finalStatus = 'pending_retry';
-    } else if (score >= 75) {
-      finalStatus = 'pending_admin_review';
-    } else {
-      finalStatus = 'rejected';
-    }
+    if (aiResult.decision === 'pending_retry' || aiResult.status === 'pending_retry') finalStatus = 'pending_retry';
+    else if (score >= 75) finalStatus = 'pending_admin_review';
+    else finalStatus = 'rejected';
 
     aiResult.status = finalStatus;
     setResult(aiResult);
 
-    try { await saveProof(fileUrls, aiResult, finalStatus); }
-    catch (e) { console.error('saveProof failed:', e); }
+    try { await saveProof(fileUrls, aiResult, finalStatus); } catch(e) { console.error(e); }
 
     if (finalStatus === 'pending_admin_review') {
-      onToast(`✅ Verification completed (${score}% confidence) — sent to admin review`, 'success');
+      onToast(`✅ Verification passed (${score}%) — sent to admin review`, 'success');
     } else if (finalStatus === 'pending_retry') {
-      onToast('⏳ AI temporarily unavailable. Proof queued for retry.', 'warning');
+      onToast('⏳ AI unavailable. Proof queued for retry.', 'warning');
     } else {
-      onToast(`❌ Score ${score}% — below 75% threshold. Please upload a clearer document.`, 'error');
+      onToast(`❌ Score ${score}% — below 75% threshold. Proof rejected.`, 'error');
     }
     setVerifying(false);
   };
 
-  // ── Derived values ────────────────────────────────────────────────────────
-  const safeMilestones     = normalizeMilestones(selCampaign?.milestones);
-  const totalMilestones    = safeMilestones.length;
-  const currentMsNo        = selCampaign?.currentMilestone || 1;
-  const currentMsIndex     = currentMsNo - 1;
-  const currentMsObj       = safeMilestones[currentMsIndex];
-  const currentMsTitle     = currentMsObj?.title || '';
+  // ── Derived ───────────────────────────────────────────────────────────────
+  const safeMilestones      = normalizeMilestones(selCampaign?.milestones);
+  const totalMilestones     = safeMilestones.length;
+  const currentMsNo         = selCampaign?.currentMilestone || 1;
+  const currentMsIndex      = currentMsNo - 1;
+  const currentMsObj        = safeMilestones[currentMsIndex];
+  const currentMsTitle      = currentMsObj?.title || '';
   const allMilestonesComplete = currentMsNo > totalMilestones && totalMilestones > 0;
 
   const currentProofKey    = selCampaign ? `${String(selCampaign.id)}_${String(currentMsNo)}` : null;
   const currentProofData   = currentProofKey ? submittedProofs[currentProofKey] : null;
   const currentProofStatus = currentProofData?.status || null;
 
-  // ✅ FIXED: Only block re-upload if under admin review or already approved
-  // Rejected proofs CAN be re-uploaded (NGO gets another chance)
-  const blockUpload = currentProofStatus === 'pending_admin_review' ||
-                      currentProofStatus === 'approved';
+  // ── STRICT 1-UPLOAD POLICY ────────────────────────────────────────────────
+  // Once a proof is submitted (any status), no re-upload is allowed.
+  // rejected → permanently blocked (contact admin)
+  // pending_admin_review → blocked until admin acts
+  // approved/verified → blocked (already done)
+  const blockUpload = !!currentProofStatus &&
+                      currentProofStatus !== 'pending_retry';
 
   const scoreColor = (result?.confidence_score ?? 0) >= 75 ? '#34d399' : '#f87171';
 
@@ -363,7 +346,7 @@ export default function ProofUpload({ onToast }) {
         Upload Milestone Proof
       </h2>
       <p style={{ color:'rgba(255,255,255,0.35)', fontSize:'14px', marginBottom:'20px' }}>
-        AI verifies every document — score ≥ 75% goes to admin review, below is rejected
+        Each milestone allows exactly one proof upload — score ≥ 75% proceeds to admin review
       </p>
 
       {/* Campaign selector */}
@@ -388,38 +371,7 @@ export default function ProofUpload({ onToast }) {
         </div>
       )}
 
-      {/* Status banners — shown based on current proof status */}
-      {selCampaign && !allMilestonesComplete && currentProofStatus === 'pending_admin_review' && (
-        <div style={{ padding:'20px 24px', borderRadius:'16px', marginBottom:'20px', border:'1px solid rgba(245,158,11,0.4)', background:'rgba(245,158,11,0.07)' }}>
-          <div style={{ fontSize:'14px', fontWeight:700, color:'#fcd34d', marginBottom:'6px' }}>
-            ⏳ Proof submitted for Milestone {currentMsNo} — awaiting admin review
-          </div>
-          <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.4)' }}>
-            AI score: <strong>{currentProofData?.aiScore ?? '—'}%</strong> · You cannot re-upload until admin reviews
-          </div>
-        </div>
-      )}
-
-      {selCampaign && !allMilestonesComplete && currentProofStatus === 'approved' && (
-        <div style={{ padding:'20px 24px', borderRadius:'16px', marginBottom:'20px', border:'1px solid rgba(16,185,129,0.4)', background:'rgba(16,185,129,0.07)' }}>
-          <div style={{ fontSize:'14px', fontWeight:700, color:'#6ee7b7' }}>
-            ✅ Milestone {currentMsNo} proof approved — next milestone is now active
-          </div>
-        </div>
-      )}
-
-      {selCampaign && !allMilestonesComplete && currentProofStatus === 'rejected' && !result && (
-        <div style={{ padding:'20px 24px', borderRadius:'16px', marginBottom:'20px', border:'1px solid rgba(239,68,68,0.4)', background:'rgba(239,68,68,0.07)' }}>
-          <div style={{ fontSize:'14px', fontWeight:700, color:'#fca5a5', marginBottom:'6px' }}>
-            ❌ Previous proof was rejected (score: {currentProofData?.aiScore ?? '—'}%) — upload a clearer document below ↓
-          </div>
-          <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.4)' }}>
-            Use a real photographed/scanned document. AI-generated images are automatically rejected.
-          </div>
-        </div>
-      )}
-
-      {/* Milestone hint */}
+      {/* Milestone hint — only when upload is allowed */}
       {selCampaign && !allMilestonesComplete && !blockUpload && currentMsObj && (
         <div style={{ marginBottom:'20px', padding:'10px 14px', borderRadius:'10px', border:'1px solid rgba(34,211,238,0.2)', background:'rgba(34,211,238,0.05)', fontSize:'12px', color:'#67e8f9' }}>
           📋 <strong>Milestone {currentMsNo}{currentMsTitle ? ` — ${currentMsTitle}` : ''} documents:</strong>{' '}
@@ -440,29 +392,29 @@ export default function ProofUpload({ onToast }) {
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
                 {safeMilestones.map((m, i) => {
-                  const msNo     = i + 1;
+                  const msNo      = i + 1;
                   const isCurrent = msNo === currentMsNo && !allMilestonesComplete;
                   const proofKey  = `${String(selCampaign.id)}_${String(msNo)}`;
                   const proof     = submittedProofs[proofKey];
 
                   let displayStatus;
-                  if      (m.status === 'verified' || m.status === 'approved') displayStatus = 'verified';
-                  else if (proof && proof.status !== 'pending_retry')           displayStatus = proof.status;
-                  else if (msNo < currentMsNo)                                  displayStatus = 'pending_admin_review';
-                  else if (isCurrent)                                           displayStatus = 'pending';
-                  else                                                           displayStatus = 'locked';
+                  if      (m.status==='verified'||m.status==='approved') displayStatus = 'verified';
+                  else if (proof && proof.status!=='pending_retry')      displayStatus = proof.status;
+                  else if (msNo < currentMsNo)                           displayStatus = 'pending_admin_review';
+                  else if (isCurrent)                                    displayStatus = 'pending';
+                  else                                                   displayStatus = 'locked';
 
                   const amt = m.amount && m.amount > 0 ? m.amount : (() => {
-                    const total = Number(selCampaign.targetAmount)||0, n=totalMilestones;
+                    const total=Number(selCampaign.targetAmount)||0, n=totalMilestones;
                     if (!total||!n) return 0;
-                    const per = Math.floor(total/n);
-                    return i===n-1 ? total-per*(n-1) : per;
+                    const per=Math.floor(total/n);
+                    return i===n-1?total-per*(n-1):per;
                   })();
 
                   return (
                     <div key={i} style={{ padding:'14px 16px', borderRadius:'12px', ...(MS_STYLE[displayStatus]||MS_STYLE.locked) }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
-                        <span style={{ fontSize:'13px', fontWeight:600 }}>{m.title || `Milestone ${msNo}`}</span>
+                        <span style={{ fontSize:'13px', fontWeight:600 }}>{m.title||`Milestone ${msNo}`}</span>
                         <span style={{ fontSize:'10px', fontWeight:700, padding:'3px 9px', borderRadius:'999px', ...(PILL[displayStatus]||PILL.locked) }}>
                           {getPillLabel(displayStatus)}
                         </span>
@@ -482,30 +434,78 @@ export default function ProofUpload({ onToast }) {
           )}
         </div>
 
-        {/* Right — Upload area */}
+        {/* Right — upload or status */}
         <div>
-          {(!selCampaign || allMilestonesComplete || blockUpload) ? (
-            <div style={{ borderRadius:'18px', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021', padding:'32px', textAlign:'center' }}>
-              <div style={{ fontSize:'40px', marginBottom:'12px' }}>
-                {allMilestonesComplete ? '✅' : blockUpload ? '⏳' : '📋'}
+          {/* ── BLOCKED: proof already submitted ── */}
+          {(allMilestonesComplete || blockUpload || !selCampaign) ? (
+            <div style={{ borderRadius:'18px', overflow:'hidden', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021' }}>
+
+              {/* Icon + title */}
+              <div style={{ padding:'32px 28px', textAlign:'center', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+                <div style={{ fontSize:'48px', marginBottom:'12px' }}>
+                  {allMilestonesComplete ? '🎉'
+                    : currentProofStatus==='pending_admin_review' ? '⏳'
+                    : currentProofStatus==='rejected' ? '🚫'
+                    : currentProofStatus==='approved' ? '✅'
+                    : '📋'}
+                </div>
+                <div style={{ fontSize:'16px', fontWeight:700, color:'#fff', marginBottom:'6px' }}>
+                  {!selCampaign              ? 'Select a campaign to begin'
+                  : allMilestonesComplete    ? 'All milestones completed'
+                  : currentProofStatus==='pending_admin_review' ? 'Proof under admin review'
+                  : currentProofStatus==='rejected'             ? 'Proof submission closed'
+                  : currentProofStatus==='approved'             ? 'Milestone approved'
+                  : ''}
+                </div>
+                <div style={{ fontSize:'13px', color:'rgba(255,255,255,0.4)', lineHeight:1.6 }}>
+                  {currentProofStatus==='pending_admin_review' && 'Your proof has been submitted and is awaiting admin review. You will be notified once reviewed.'}
+                  {currentProofStatus==='rejected'             && 'This milestone only allows one proof submission. Contact admin if you believe this is an error.'}
+                  {currentProofStatus==='approved'             && 'Funds for this milestone have been released.'}
+                </div>
               </div>
-              <div style={{ fontSize:'14px', fontWeight:600, color:'rgba(255,255,255,0.5)' }}>
-                {!selCampaign              ? 'Select a campaign to begin'
-                : allMilestonesComplete   ? 'All milestones completed'
-                : currentProofStatus === 'pending_admin_review' ? 'Proof under review — cannot re-upload'
-                : 'Milestone approved ✅'}
-              </div>
+
+              {/* Detail strip for rejected */}
+              {currentProofStatus === 'rejected' && (
+                <div style={{ padding:'20px 28px', background:'rgba(239,68,68,0.06)', borderTop:'1px solid rgba(239,68,68,0.15)' }}>
+                  <div style={{ display:'flex', gap:'12px', alignItems:'flex-start', marginBottom:'14px' }}>
+                    <div style={{ fontSize:'22px', flexShrink:0 }}>❌</div>
+                    <div>
+                      <div style={{ fontSize:'13px', fontWeight:700, color:'#fca5a5', marginBottom:'4px' }}>
+                        AI score: {currentProofData?.aiScore ?? '—'}% — below 75% threshold
+                      </div>
+                      <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.35)', lineHeight:1.6 }}>
+                        Only one submission is permitted per milestone.<br/>
+                        Contact the platform admin at <span style={{ color:'#67e8f9' }}>admin@transparentfund.in</span> for further assistance.
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ padding:'12px 14px', borderRadius:'10px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)', fontSize:'11px', color:'rgba(255,255,255,0.3)', lineHeight:1.7 }}>
+                    💡 For future milestones, ensure you upload a <strong style={{ color:'rgba(255,255,255,0.5)' }}>real photographed or scanned document</strong> — receipts, certificates, or hospital reports taken with a camera. AI-generated images are automatically rejected.
+                  </div>
+                </div>
+              )}
+
+              {/* Detail strip for under review */}
+              {currentProofStatus === 'pending_admin_review' && (
+                <div style={{ padding:'20px 28px', background:'rgba(245,158,11,0.05)', borderTop:'1px solid rgba(245,158,11,0.12)' }}>
+                  <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.35)', lineHeight:1.7 }}>
+                    AI confidence score: <strong style={{ color:'#fcd34d' }}>{currentProofData?.aiScore ?? '—'}%</strong><br/>
+                    Admin will release funds once the document is verified. This typically takes 1–2 business days.
+                  </div>
+                </div>
+              )}
             </div>
+
           ) : (
+            /* ── UPLOAD AREA ── */
             <>
               <div style={{ borderRadius:'18px', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021', padding:'24px', marginBottom:'16px' }}>
-                <h3 style={{ fontSize:'16px', fontWeight:700, color:'#fff', marginBottom:'4px' }}>Upload Documents</h3>
+                <h3 style={{ fontSize:'16px', fontWeight:700, color:'#fff', marginBottom:'4px' }}>Upload Document</h3>
                 <p style={{ fontSize:'12px', color:'rgba(255,255,255,0.35)', marginBottom:'20px' }}>
                   Milestone {currentMsNo} of {totalMilestones}{currentMsTitle ? ` — ${currentMsTitle}` : ''}
-                  {currentProofStatus === 'rejected' && <span style={{ color:'#fca5a5', marginLeft:'8px' }}>· Previous attempt rejected — try again</span>}
+                  <span style={{ color:'#fca5a5', marginLeft:'8px', fontWeight:600 }}>· 1 attempt only</span>
                 </p>
 
-                {/* Drop zone */}
                 <div
                   onClick={() => fileRef.current?.click()}
                   onDragEnter={() => setDrag(true)}
@@ -516,13 +516,13 @@ export default function ProofUpload({ onToast }) {
                     border:`2px dashed ${drag?'rgba(124,58,237,0.7)':'rgba(255,255,255,0.1)'}`,
                     borderRadius:'14px', padding:'48px 24px', textAlign:'center',
                     cursor:'pointer', marginBottom:'14px',
-                    background: drag?'rgba(124,58,237,0.06)':'transparent', transition:'all 0.2s',
+                    background:drag?'rgba(124,58,237,0.06)':'transparent', transition:'all 0.2s',
                   }}>
                   <input ref={fileRef} type="file" accept="image/*,.pdf" multiple style={{ display:'none' }}
                     onChange={e => Array.from(e.target.files).forEach(handleFile)} />
                   <div style={{ fontSize:'32px', marginBottom:'12px' }}>📄</div>
                   <div style={{ fontSize:'14px', fontWeight:600, color:'#fff', marginBottom:'4px' }}>Click or drag to upload</div>
-                  <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.35)' }}>JPG, PNG, WEBP recommended · PDF limited · Score ≥ 75% required</div>
+                  <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.35)' }}>JPG, PNG, WEBP recommended · Score ≥ 75% required · One attempt only</div>
                 </div>
 
                 {uploaded.length > 0 && (
@@ -558,12 +558,13 @@ export default function ProofUpload({ onToast }) {
                     }}>
                     {verifying
                       ? <><span style={{ width:'16px', height:'16px', border:'2px solid rgba(255,255,255,0.3)', borderTopColor:'#fff', borderRadius:'50%', animation:'spin 0.8s linear infinite', display:'inline-block' }}/>Analyzing with AI…</>
-                      : uploading ? 'Uploading files…'
-                      : '🤖 Upload & Run AI Verification'}
+                      : uploading ? 'Uploading…'
+                      : '🤖 Submit & Verify — 1 Attempt Only'}
                   </button>
                 )}
               </div>
 
+              {/* Result card — no retry button */}
               {result && (
                 <div style={{ borderRadius:'18px', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021', padding:'24px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
@@ -580,29 +581,25 @@ export default function ProofUpload({ onToast }) {
                     padding:'12px 16px', borderRadius:'12px', marginBottom:'16px', fontSize:'13px', fontWeight:700,
                     ...(result.status==='pending_retry'
                       ? { border:'1px solid rgba(59,130,246,0.4)', background:'rgba(59,130,246,0.08)', color:'#93c5fd' }
-                      : result.confidence_score >= 75
+                      : result.confidence_score>=75
                       ? { border:'1px solid rgba(16,185,129,0.4)', background:'rgba(16,185,129,0.08)', color:'#6ee7b7' }
                       : { border:'1px solid rgba(239,68,68,0.4)', background:'rgba(239,68,68,0.08)', color:'#fca5a5' }),
                   }}>
-                    {result.status === 'pending_retry'
-                      ? '⏳ AI temporarily unavailable — proof queued for retry'
-                      : result.confidence_score >= 75
-                      ? '✅ Score ≥ 75% — Sent to admin review'
-                      : `❌ Score ${result.confidence_score}% — below 75% threshold`}
+                    {result.status==='pending_retry'
+                      ? '⏳ AI temporarily unavailable — proof queued'
+                      : result.confidence_score>=75
+                      ? '✅ Score ≥ 75% — Sent to admin for final review'
+                      : `❌ Score ${result.confidence_score}% — below 75% threshold. Proof rejected.`}
                     {result.reason && (
                       <div style={{ fontSize:'12px', fontWeight:400, marginTop:'4px', opacity:0.85 }}>{result.reason}</div>
                     )}
                   </div>
 
-                  {/* Verification flags */}
-                  <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:'rgba(255,255,255,0.3)', marginBottom:'10px' }}>
-                    Verification Flags
-                  </div>
-                  <div style={{ display:'flex', flexDirection:'column', gap:'7px', marginBottom:'16px' }}>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'7px', marginBottom:'14px' }}>
                     {[
-                      { label:'Relevant to Campaign',  val: result.is_relevant },
-                      { label:'Matches Campaign Goal', val: result.matches_campaign },
-                      { label:'Fraud Check Passed',    val: !result.fraud_detected },
+                      { label:'Relevant to Campaign',  val:result.is_relevant },
+                      { label:'Matches Campaign Goal', val:result.matches_campaign },
+                      { label:'Fraud Check Passed',    val:!result.fraud_detected },
                     ].map(f => (
                       <div key={f.label} style={{ display:'flex', gap:'10px', fontSize:'12px', alignItems:'center' }}>
                         <span style={{ fontWeight:700, color:f.val?'#34d399':'#f87171', flexShrink:0 }}>{f.val?'✓':'✗'}</span>
@@ -612,28 +609,20 @@ export default function ProofUpload({ onToast }) {
                   </div>
 
                   <div style={{ padding:'10px 14px', borderRadius:'10px', border:'1px solid rgba(34,211,238,0.2)', background:'rgba(34,211,238,0.05)', fontSize:'12px', color:'#67e8f9' }}>
-                    {result.status === 'pending_retry'
-                      ? '📋 Queued for retry. You may upload again.'
-                      : result.confidence_score >= 75
-                      ? '📋 Proof sent to admin panel for final review and fund release.'
-                      : '📋 Rejected — upload a real photographed/scanned document with visible paper texture.'}
+                    {result.status==='pending_retry'
+                      ? '📋 Queued for retry. Your proof is saved.'
+                      : result.confidence_score>=75
+                      ? '📋 Proof sent to admin panel. Funds released after approval.'
+                      : '📋 Submission recorded. Contact admin if you believe this is incorrect.'}
                   </div>
-
-                  {/* Allow retry after rejection */}
-                  {result.confidence_score < 75 && result.status !== 'pending_retry' && (
-                    <button
-                      onClick={() => { setResult(null); setUploaded([]); setFileObjs([]); setImgBase64(null); setImgType(null); }}
-                      style={{ width:'100%', marginTop:'12px', padding:'11px', borderRadius:'10px', border:'1px solid rgba(255,255,255,0.12)', background:'rgba(255,255,255,0.06)', color:'#fff', fontWeight:600, fontSize:'13px', cursor:'pointer' }}>
-                      ↩ Try Again with Different Document
-                    </button>
-                  )}
+                  {/* NO retry button — 1 attempt policy */}
                 </div>
               )}
             </>
           )}
         </div>
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`@keyframes spin { to { transform:rotate(360deg); } }`}</style>
     </div>
   );
 }
