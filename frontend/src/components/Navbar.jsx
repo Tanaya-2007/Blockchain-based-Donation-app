@@ -37,23 +37,20 @@ export default function Navbar({ onDonate }) {
       <nav style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
         height: '68px', display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', padding: '0 24px',
+        justifyContent: 'space-between',gap: '12px', padding: '0 24px',
         background: 'rgba(5,8,18,0.92)', backdropFilter: 'blur(24px)',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
       }}>
 
         {/* ── Logo (always left) ── */}
         <button onClick={() => { close(); nav('/'); }}
-          style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
+          style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0, minWidth: 0 }}>
           <div style={{
             width: '36px', height: '36px', borderRadius: '10px',
             background: 'linear-gradient(135deg,#7c3aed,#0891b2)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px',
           }}>💎</div>
-          <span style={{
-            fontFamily: "'Playfair Display',Georgia,serif",
-            fontWeight: 800, fontSize: '18px', color: '#fff', letterSpacing: '-0.3px',
-          }}>
+          <span style={{ fontFamily: "'Playfair Display',Georgia,serif", fontWeight: 800, fontSize: '18px', color: '#fff', letterSpacing: '-0.3px', whiteSpace: 'nowrap',}}>
             Transparent<span style={{ color: '#8b5cf6' }}>Fund</span>
           </span>
         </button>
@@ -218,13 +215,71 @@ export default function Navbar({ onDonate }) {
 
       {/* ── CSS for responsive breakpoints ── */}
       <style>{`
-        .nav-desktop { display: flex !important; }
-        .nav-hamburger { display: none !important; }
-        .nav-mobile-drawer { display: flex !important; }
+        /* Default desktop */
+        .nav-desktop {
+          display: flex !important;
+        }
 
+        .nav-hamburger {
+          display: none !important;
+        }
+
+        .nav-mobile-drawer {
+          display: flex !important;
+        }
+
+        /* Tablet fix */
+        @media (max-width: 1024px) {
+          nav {
+            padding: 0 16px !important;
+          }
+
+          .nav-desktop {
+            gap: 2px !important;
+          }
+
+          .nav-desktop a,
+          .nav-desktop button {
+            font-size: 12px !important;
+            padding: 7px 10px !important;
+          }
+        }
+
+        /* Mobile */
         @media (max-width: 768px) {
-          .nav-desktop { display: none !important; }
-          .nav-hamburger { display: flex !important; }
+          .nav-desktop {
+            display: none !important;
+          }
+
+          .nav-hamburger {
+            display: flex !important;
+            flex-shrink: 0;
+            margin-left: auto;
+          }
+
+          nav {
+            padding: 0 16px !important;
+            height: 64px !important;
+          }
+
+          nav button span {
+            white-space: nowrap;
+          }
+        }
+
+        /* Extra small phones */
+        @media (max-width: 480px) {
+          nav {
+            padding: 0 12px !important;
+          }
+
+          nav button span {
+            font-size: 16px !important;
+          }
+
+          .nav-hamburger {
+            padding: 8px !important;
+          }
         }
       `}</style>
     </>
