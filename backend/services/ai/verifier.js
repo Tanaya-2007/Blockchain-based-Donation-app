@@ -101,7 +101,7 @@ function buildFinalResult(parsed, provider) {
   console.log(`│ [AI RESULT] Decision  : ${decision}`);
   console.log(`│ [AI RESULT] AI prob   : ${fs.ai_generation_probability||0}%`);
   console.log(`│ [AI RESULT] Tamper    : ${fs.tampering_probability||0}%`);
-  console.log(`│ [AI RESULT] Reason    : ${(parsed.reason||'').slice(0,80)}`);
+  console.log(`│ [AI RESULT] Reason    : ${parsed.reason||'No reason provided'}`);
   if (pen.length) console.log(`│ [AI RESULT] Penalties : ${pen.slice(0,4).join(' | ')}`);
   if (pos.length) console.log(`│ [AI RESULT] Positives : ${pos.slice(0,4).join(' | ')}`);
   console.log('└─────────────────────────────────────────────────');

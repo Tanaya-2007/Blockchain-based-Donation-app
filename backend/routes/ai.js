@@ -36,13 +36,12 @@ router.post('/messages', async (req, res) => {
 
     const result = await verifyDocument(campaignContext, base64Image, mimeType);
 
-    // ── FULL RESULT — terminal only, never sent to browser ───────────────
     console.log('\n╔══════════════════════════════════════════════════╗');
     console.log('║              VERIFICATION RESULT                ║');
     console.log('╠══════════════════════════════════════════════════╣');
     console.log(`║  🤖 Provider  : ${(result.ai_provider || 'Unknown').padEnd(32)}║`);
     console.log(`║  📄 Class     : ${(result.document_classification || '—').padEnd(32)}║`);
-    console.log(`║  🎯 Score     : ${String(result.confidence_score + '/93').padEnd(32)}║`);
+    console.log(`║  🎯 Score     : ${String((result.confidence_score || 0) + '/93').padEnd(32)}║`);
     console.log(`║  🚦 Risk      : ${(result.risk_label || '—').padEnd(32)}║`);
     console.log(`║  ✅ Decision  : ${(result.decision || '—').padEnd(32)}║`);
     console.log(`║  🧠 AI Prob   : ${String((result.forensic_analysis?.ai_generation_probability || 0) + '%').padEnd(32)}║`);
@@ -54,9 +53,12 @@ router.post('/messages', async (req, res) => {
     if (result.positive_signals?.length) {
       console.log(`║  ⬆  Positives : ${result.positive_signals.slice(0, 2).join(' | ').slice(0, 32).padEnd(32)}║`);
     }
-    console.log('╚══════════════════════════════════════════════════╝\n');
+    console.log('╚══════════════════════════════════════════════════╝');
+    console.log('\n[AI SUMMARY / REASON]:');
+    console.log(result.reason || 'No reason provided.');
+    console.log('────────────────────────────────────────────────────\n');
 
-    // ── Strip real provider before sending to browser ────────────────────
+    // Strip internal fields before sending to browser
     const { ai_provider, penalties, positive_signals, ...safeResult } = result;
     safeResult.ai_provider = 'TransparentFund AI';
 
