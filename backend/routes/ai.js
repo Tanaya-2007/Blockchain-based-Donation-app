@@ -53,16 +53,9 @@ router.post('/messages', async (req, res) => {
     if (result.positive_signals?.length) {
       console.log(`║  ⬆  Positives : ${result.positive_signals.slice(0, 2).join(' | ').slice(0, 32).padEnd(32)}║`);
     }
-    console.log('╚══════════════════════════════════════════════════╝');
-    console.log('\n[AI SUMMARY / REASON]:');
-    console.log(result.reason || 'No reason provided.');
-    console.log('────────────────────────────────────────────────────\n');
+    console.log('╚══════════════════════════════════════════════════╝\n');
 
-    // Strip internal fields before sending to browser
-    const { ai_provider, penalties, positive_signals, ...safeResult } = result;
-    safeResult.ai_provider = 'TransparentFund AI';
-
-    return res.json({ content: [{ text: JSON.stringify(safeResult) }] });
+      return res.json({ content: [{ text: JSON.stringify(result) }] });
 
   } catch (err) {
     console.error('\n[AI ROUTE] ❌ FATAL ERROR:', err.message, '\n');
@@ -74,7 +67,7 @@ router.post('/messages', async (req, res) => {
         document_classification: 'unknown',
         decision:                'pending_retry',
         reason:                  'Verification temporarily unavailable.',
-        ai_provider:             'TransparentFund AI',
+        ai_provider:             'Service Outage',
         is_relevant:             true,
         matches_campaign:        true,
         fraud_detected:          false,
