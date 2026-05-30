@@ -85,6 +85,9 @@ const PILL = {
   rejected:             { background:'rgba(239,68,68,0.15)',  color:'#fca5a5',              border:'1px solid rgba(239,68,68,0.3)'  },
 };
 
+// ── CHANGE 1: only image types accepted ──────────────────────────────────────
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+
 function getPillLabel(status) {
   if (status === 'verified' || status === 'approved') return '✓ Verified';
   if (status === 'pending_admin_review') return '⏳ Under Review';
@@ -157,15 +160,18 @@ export default function ProofUpload({ onToast }) {
     setResult(null); setImgBase64(null); setImgType(null);
   };
 
+  // ── CHANGE 2: reject non-image files immediately with a clear toast ───────
   const handleFile = file => {
     if (!file) return;
-    setUploaded(prev => [...prev, { name: file.name, size: (file.size/1024/1024).toFixed(1)+' MB', icon: '📄' }]);
-    setFileObjs(prev => [...prev, file]);
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = e => { setImgBase64(e.target.result.split(',')[1]); setImgType(file.type); };
-      reader.readAsDataURL(file);
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      onToast('⚠️ PDFs are not accepted — please upload a JPG, PNG, or WEBP image of the document.', 'error');
+      return;
     }
+    setUploaded(prev => [...prev, { name: file.name, size: (file.size/1024/1024).toFixed(1)+' MB', icon: '🖼️' }]);
+    setFileObjs(prev => [...prev, file]);
+    const reader = new FileReader();
+    reader.onload = e => { setImgBase64(e.target.result.split(',')[1]); setImgType(file.type); };
+    reader.readAsDataURL(file);
   };
 
   // ── Save proof ────────────────────────────────────────────────────────────
@@ -192,7 +198,8 @@ export default function ProofUpload({ onToast }) {
       aiScore:       aiResult?.confidence_score ?? null,
       aiVerdict:     aiResult?.status            ?? null,
       aiSummary:     aiResult?.reason            ?? null,
-      aiProvider:    'TransparentFund AI',
+      // ── CHANGE 3: save real AI provider name, not hardcoded string ──────
+      aiProvider:    aiResult?.ai_provider ?? 'Unknown',
       status:        finalStatus,
       uploadedAt:    serverTimestamp(),
     });
@@ -229,10 +236,12 @@ export default function ProofUpload({ onToast }) {
     if (fileObjs.length === 0) { onToast('No file uploaded', 'error'); return; }
     if (!selCampaign)          { onToast('Select a campaign first', 'error'); return; }
 
-    const allowed = ['image/jpeg','image/jpg','image/png','image/webp','application/pdf'];
     for (const file of fileObjs) {
-      if (file.size < 5120)             { onToast(`File ${file.name} too small (<5KB).`, 'error'); return; }
-      if (!allowed.includes(file.type)) { onToast('Only JPG, PNG, WEBP, or PDF allowed.', 'error'); return; }
+      if (file.size < 5120) { onToast(`File ${file.name} too small (<5KB).`, 'error'); return; }
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        onToast('⚠️ Only JPG, PNG, or WEBP images are accepted. Please remove any PDF files.', 'error');
+        return;
+      }
     }
 
     setUploading(true); setUploadPct(0);
@@ -270,9 +279,10 @@ export default function ProofUpload({ onToast }) {
         aiResult = JSON.parse(match ? match[0] : raw);
       } else {
         aiResult = {
-          status:'rejected', confidence_score:30, decision:'reject', risk_label:'LOW_TRUST',
-          reason:'PDF cannot be visually verified. Upload a JPG or PNG photo.',
-          is_relevant:true, matches_campaign:true, fraud_detected:false,
+          status:'rejected', confidence_score:0, decision:'reject', risk_label:'HIGH_RISK_FRAUD',
+          reason:'No image found. Please upload a JPG, PNG, or WEBP photo of the document.',
+          is_relevant:false, matches_campaign:false, fraud_detected:false,
+          ai_provider: 'Validation',
         };
       }
     } catch {
@@ -281,6 +291,7 @@ export default function ProofUpload({ onToast }) {
         risk_label:'HIGH_RISK_FRAUD',
         reason:'AI verification temporarily unavailable.',
         is_relevant:true, matches_campaign:true, fraud_detected:false,
+        ai_provider: 'Service Outage',
       };
     }
 
@@ -306,25 +317,19 @@ export default function ProofUpload({ onToast }) {
   };
 
   // ── Derived ───────────────────────────────────────────────────────────────
-  const safeMilestones      = normalizeMilestones(selCampaign?.milestones);
-  const totalMilestones     = safeMilestones.length;
-  const currentMsNo         = selCampaign?.currentMilestone || 1;
-  const currentMsIndex      = currentMsNo - 1;
-  const currentMsObj        = safeMilestones[currentMsIndex];
-  const currentMsTitle      = currentMsObj?.title || '';
+  const safeMilestones        = normalizeMilestones(selCampaign?.milestones);
+  const totalMilestones       = safeMilestones.length;
+  const currentMsNo           = selCampaign?.currentMilestone || 1;
+  const currentMsIndex        = currentMsNo - 1;
+  const currentMsObj          = safeMilestones[currentMsIndex];
+  const currentMsTitle        = currentMsObj?.title || '';
   const allMilestonesComplete = currentMsNo > totalMilestones && totalMilestones > 0;
 
   const currentProofKey    = selCampaign ? `${String(selCampaign.id)}_${String(currentMsNo)}` : null;
   const currentProofData   = currentProofKey ? submittedProofs[currentProofKey] : null;
   const currentProofStatus = currentProofData?.status || null;
 
-  // ── STRICT 1-UPLOAD POLICY ────────────────────────────────────────────────
-  // Once a proof is submitted (any status), no re-upload is allowed.
-  // rejected → permanently blocked (contact admin)
-  // pending_admin_review → blocked until admin acts
-  // approved/verified → blocked (already done)
-  const blockUpload = !!currentProofStatus &&
-                      currentProofStatus !== 'pending_retry';
+  const blockUpload = !!currentProofStatus && currentProofStatus !== 'pending_retry';
 
   const scoreColor = (result?.confidence_score ?? 0) >= 75 ? '#34d399' : '#f87171';
 
@@ -345,9 +350,17 @@ export default function ProofUpload({ onToast }) {
       <h2 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'30px', fontWeight:800, color:'#fff', letterSpacing:'-0.5px', marginBottom:'6px' }}>
         Upload Milestone Proof
       </h2>
-      <p style={{ color:'rgba(255,255,255,0.35)', fontSize:'14px', marginBottom:'20px' }}>
+      <p style={{ color:'rgba(255,255,255,0.35)', fontSize:'14px', marginBottom:'16px' }}>
         Each milestone allows exactly one proof upload — score ≥ 75% proceeds to admin review
       </p>
+
+      {/* ── CHANGE 4: persistent image-only warning banner ─────────────────── */}
+      <div style={{ marginBottom:'20px', padding:'12px 16px', borderRadius:'12px', border:'1px solid rgba(245,158,11,0.4)', background:'rgba(245,158,11,0.08)', display:'flex', alignItems:'flex-start', gap:'10px' }}>
+        <span style={{ fontSize:'18px', flexShrink:0 }}>⚠️</span>
+        <div style={{ fontSize:'13px', color:'#fcd34d', lineHeight:1.6 }}>
+          <strong>Images only — PDF files are not accepted.</strong> Take a clear photo or scan of your document and upload it as JPG, PNG, or WEBP. PDF files cannot be analysed by the AI verification system.
+        </div>
+      </div>
 
       {/* Campaign selector */}
       {campaigns.length > 1 && (
@@ -439,8 +452,6 @@ export default function ProofUpload({ onToast }) {
           {/* ── BLOCKED: proof already submitted ── */}
           {(allMilestonesComplete || blockUpload || !selCampaign) ? (
             <div style={{ borderRadius:'18px', overflow:'hidden', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021' }}>
-
-              {/* Icon + title */}
               <div style={{ padding:'32px 28px', textAlign:'center', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
                 <div style={{ fontSize:'48px', marginBottom:'12px' }}>
                   {allMilestonesComplete ? '🎉'
@@ -464,7 +475,6 @@ export default function ProofUpload({ onToast }) {
                 </div>
               </div>
 
-              {/* Detail strip for rejected */}
               {currentProofStatus === 'rejected' && (
                 <div style={{ padding:'20px 28px', background:'rgba(239,68,68,0.06)', borderTop:'1px solid rgba(239,68,68,0.15)' }}>
                   <div style={{ display:'flex', gap:'12px', alignItems:'flex-start', marginBottom:'14px' }}>
@@ -480,12 +490,11 @@ export default function ProofUpload({ onToast }) {
                     </div>
                   </div>
                   <div style={{ padding:'12px 14px', borderRadius:'10px', background:'rgba(0,0,0,0.2)', border:'1px solid rgba(255,255,255,0.06)', fontSize:'11px', color:'rgba(255,255,255,0.3)', lineHeight:1.7 }}>
-                    💡 For future milestones, ensure you upload a <strong style={{ color:'rgba(255,255,255,0.5)' }}>real photographed or scanned document</strong> — receipts, certificates, or hospital reports taken with a camera. AI-generated images are automatically rejected.
+                    💡 For future milestones, upload a <strong style={{ color:'rgba(255,255,255,0.5)' }}>clear JPG, PNG, or WEBP photo</strong> of your document — receipts, certificates, or hospital reports taken with a camera. PDF files and AI-generated images are automatically rejected.
                   </div>
                 </div>
               )}
 
-              {/* Detail strip for under review */}
               {currentProofStatus === 'pending_admin_review' && (
                 <div style={{ padding:'20px 28px', background:'rgba(245,158,11,0.05)', borderTop:'1px solid rgba(245,158,11,0.12)' }}>
                   <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.35)', lineHeight:1.7 }}>
@@ -511,18 +520,30 @@ export default function ProofUpload({ onToast }) {
                   onDragEnter={() => setDrag(true)}
                   onDragLeave={() => setDrag(false)}
                   onDragOver={e => e.preventDefault()}
-                  onDrop={e => { e.preventDefault(); setDrag(false); Array.from(e.dataTransfer.files).forEach(handleFile); }}
+                  onDrop={e => {
+                    e.preventDefault(); setDrag(false);
+                    Array.from(e.dataTransfer.files).forEach(handleFile);
+                  }}
                   style={{
                     border:`2px dashed ${drag?'rgba(124,58,237,0.7)':'rgba(255,255,255,0.1)'}`,
                     borderRadius:'14px', padding:'48px 24px', textAlign:'center',
                     cursor:'pointer', marginBottom:'14px',
                     background:drag?'rgba(124,58,237,0.06)':'transparent', transition:'all 0.2s',
                   }}>
-                  <input ref={fileRef} type="file" accept="image/*,.pdf" multiple style={{ display:'none' }}
-                    onChange={e => Array.from(e.target.files).forEach(handleFile)} />
-                  <div style={{ fontSize:'32px', marginBottom:'12px' }}>📄</div>
+                  {/* ── CHANGE 4 (cont): accept images only, not PDF ── */}
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/webp"
+                    multiple
+                    style={{ display:'none' }}
+                    onChange={e => Array.from(e.target.files).forEach(handleFile)}
+                  />
+                  <div style={{ fontSize:'32px', marginBottom:'12px' }}>🖼️</div>
                   <div style={{ fontSize:'14px', fontWeight:600, color:'#fff', marginBottom:'4px' }}>Click or drag to upload</div>
-                  <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.35)' }}>JPG, PNG, WEBP recommended · Score ≥ 75% required · One attempt only</div>
+                  <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.35)' }}>
+                    JPG, PNG, WEBP images only · No PDFs · Score ≥ 75% required · One attempt only
+                  </div>
                 </div>
 
                 {uploaded.length > 0 && (
@@ -564,7 +585,7 @@ export default function ProofUpload({ onToast }) {
                 )}
               </div>
 
-              {/* Result card — no retry button */}
+              {/* Result card */}
               {result && (
                 <div style={{ borderRadius:'18px', border:'1px solid rgba(255,255,255,0.08)', background:'#0d1021', padding:'24px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
@@ -615,7 +636,6 @@ export default function ProofUpload({ onToast }) {
                       ? '📋 Proof sent to admin panel. Funds released after approval.'
                       : '📋 Submission recorded. Contact admin if you believe this is incorrect.'}
                   </div>
-                  {/* NO retry button — 1 attempt policy */}
                 </div>
               )}
             </>

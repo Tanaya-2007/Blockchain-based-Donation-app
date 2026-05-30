@@ -56,7 +56,7 @@ jobs:
           done
           if [ $MISSING -eq 1 ]; then
             echo ""
-            echo "Build stopped — add missing secrets to GitHub and retry."
+            echo "Build stopped — add missing secrets and retry."
             exit 1
           fi
           echo "=== All secrets verified ✅ ==="
