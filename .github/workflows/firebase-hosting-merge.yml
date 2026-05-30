@@ -70,7 +70,12 @@ jobs:
 
       - name: Deploy to Firebase Hosting
         working-directory: frontend
-        run: firebase deploy --only hosting --project transparent-fund-47cd9 --token "${{ secrets.FIREBASE_TOKEN }}"
-
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          echo "$GOOGLE_APPLICATION_CREDENTIALS_JSON" > /tmp/sa.json
+          export GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa.json
+          firebase deploy --only hosting --project transparent-fund-47cd9
+          
       - name: Deployment success
         run: echo "✅ Live at https://transparent-fund-47cd9.web.app"
