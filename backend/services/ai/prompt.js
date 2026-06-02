@@ -32,11 +32,12 @@ Analyze the image and return ONLY this JSON (no markdown, no explanation):
 }
 
 Rules:
-- ai_generated_image: smooth background, perfect lighting, no paper grain, rendered text, diffusion/GAN artifacts
-- correct_document: real paper with visible grain, scan lines, ink variation, slight imperfections
-- wrong_document: real doc but wrong type (PAN/Aadhaar when cert/invoice needed)
-- unrelated_image: photos, nature, people, screenshots
-- Real Indian NGO docs are IMPERFECT. Too clean = ai_generated_image.`;
+- AI generators now add fake paper grain/noise to trick you. Do NOT assume grain means it's real. Look for HALLUCINATED text, impossible fonts, floating elements, or nonsensical letter shapes.
+- ai_generated_image: gibberish text, AI spelling mistakes, fake noise overlay, diffusion artifacts, impossible geometry.
+- correct_document: real paper with genuine, consistent physical properties.
+- wrong_document: real doc but wrong type (PAN/Aadhaar when cert/invoice needed).
+- unrelated_image: photos, nature, people, screenshots.
+- If it looks like a fake digital mockup or has AI hallucinated text, set ai_generation_probability > 90 and is_ai_generated to true.`;
 }
 
 module.exports = { buildVerificationPrompt };

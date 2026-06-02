@@ -25,6 +25,26 @@ function hasFraudKW(p) {
 
 function calculateScore(parsed) {
   const fs  = parsed.forensic_signals || {};
+
+  // Auto-correct AI probability based on severe synthetic traits
+  let aiProb = fs.ai_generation_probability || 0;
+  if (fs.lighting_is_too_perfect || fs.fonts_are_perfectly_uniform || fs.has_paper_texture === false || fs.text_looks_printed_not_rendered === false) {
+    let impliedAi = 0;
+    if (fs.lighting_is_too_perfect) impliedAi += 35;
+    if (fs.fonts_are_perfectly_uniform) impliedAi += 30;
+    if (fs.has_paper_texture === false) impliedAi += 25;
+    if (fs.text_looks_printed_not_rendered === false) impliedAi += 40;
+    
+    if (impliedAi > aiProb) {
+      aiProb = Math.min(95, impliedAi);
+      fs.ai_generation_probability = aiProb;
+      if (aiProb >= 75) {
+        fs.is_ai_generated = true;
+        parsed.document_classification = 'ai_generated_image';
+      }
+    }
+  }
+
   const cls = (parsed.document_classification || '').toLowerCase().trim();
 
   if (CLASS_CAPS[cls] !== undefined)
