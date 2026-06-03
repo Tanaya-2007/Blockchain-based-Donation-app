@@ -174,45 +174,14 @@ export default function ProofUpload({ onToast }) {
     reader.readAsDataURL(file);
   };
 
-  // ── Save proof ────────────────────────────────────────────────────────────
-  const saveProof = async (fileUrls, aiResult, finalStatus) => {
+  // ── Save proof (Local UI Update Only) ──────────────────────────────────────
+  const updateLocalState = (aiResult, finalStatus) => {
     if (!selCampaign) return;
     const currentMs = selCampaign.currentMilestone || 1;
-
-    if (aiResult?.decision === 'pending_retry' || finalStatus === 'pending_retry') {
-      const key = `${String(selCampaign.id)}_${String(currentMs)}`;
-      setSubmittedProofs(prev => ({
-        ...prev,
-        [key]: { milestoneNo: currentMs, status: 'pending_retry', aiScore: aiResult?.confidence_score },
-      }));
-      return;
-    }
-
-    await addDoc(collection(db, 'proofs'), {
-      campaignId:    selCampaign.id,
-      campaignTitle: selCampaign.title || '',
-      ngoId:         user.uid,
-      ngoName:       user.displayName || '',
-      milestoneNo:   currentMs,
-      fileUrls,
-      aiScore:       aiResult?.confidence_score ?? null,
-      aiVerdict:     aiResult?.status            ?? null,
-      aiSummary:     aiResult?.reason            ?? null,
-      // ── CHANGE 3: save real AI provider name, not hardcoded string ──────
-      aiProvider:    aiResult?.ai_provider ?? 'Unknown',
-      status:        finalStatus,
-      uploadedAt:    serverTimestamp(),
-    });
+    const key = `${String(selCampaign.id)}_${String(currentMs)}`;
 
     if (finalStatus === 'pending_admin_review') {
       const msIndex = currentMs - 1;
-      const updatedMilestones = normalizeMilestones(selCampaign.milestones).map((m, i) =>
-        i === msIndex ? { ...m, status: 'verified' } : m
-      );
-      await updateDoc(doc(db, 'campaigns', selCampaign.id), {
-        milestones:       updatedMilestones,
-        currentMilestone: currentMs + 1,
-      });
       const updateCamp = camp => ({
         ...camp,
         milestones: normalizeMilestones(camp.milestones).map((m, i) =>
@@ -224,7 +193,6 @@ export default function ProofUpload({ onToast }) {
       setCampaigns(prev => prev.map(c => c.id === selCampaign.id ? updateCamp(c) : c));
     }
 
-    const key = `${String(selCampaign.id)}_${String(currentMs)}`;
     setSubmittedProofs(prev => ({
       ...prev,
       [key]: { milestoneNo: currentMs, status: finalStatus, aiScore: aiResult?.confidence_score },
@@ -263,20 +231,34 @@ export default function ProofUpload({ onToast }) {
     const context = `Campaign: "${selCampaign.title}" | Milestone ${ms} | Amount: ₹${msAmt.toLocaleString('en-IN')}`;
 
     let aiResult = null;
+    let finalStatus = 'pending_retry';
+    
     try {
       if (imgBase64) {
-        const content = [
-          { type:'image', source:{ type:'base64', media_type:imgType, data:imgBase64 } },
-          { type:'text', text:context },
-        ];
-        const res  = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/ai/messages`, {
+        // Secure backend verification and save
+        const res  = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/ai/verify-milestone`, {
           method:'POST', headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ messages:[{ role:'user', content }] }),
+          body: JSON.stringify({
+            imageBase64: imgBase64,
+            imageType: imgType,
+            campaignContext: context,
+            campaignId: selCampaign.id,
+            campaignTitle: selCampaign.title || '',
+            ngoId: user.uid,
+            ngoName: user.displayName || '',
+            milestoneNo: ms,
+            fileUrls
+          }),
         });
-        const data  = await res.json();
-        const raw   = data.content?.[0]?.text ?? '{}';
-        const match = raw.match(/\{[\s\S]*\}/);
-        aiResult = JSON.parse(match ? match[0] : raw);
+        
+        const data = await res.json();
+        
+        if (data.error) {
+           throw new Error(data.error);
+        }
+        
+        aiResult = data.result;
+        finalStatus = data.finalStatus;
       } else {
         aiResult = {
           status:'rejected', confidence_score:0, decision:'reject', risk_label:'HIGH_RISK_FRAUD',
@@ -284,8 +266,10 @@ export default function ProofUpload({ onToast }) {
           is_relevant:false, matches_campaign:false, fraud_detected:false,
           ai_provider: 'Validation',
         };
+        finalStatus = 'rejected';
       }
-    } catch {
+    } catch (err) {
+      console.error(err);
       aiResult = {
         status:'pending_retry', confidence_score:0, decision:'pending_retry',
         risk_label:'HIGH_RISK_FRAUD',
@@ -293,19 +277,13 @@ export default function ProofUpload({ onToast }) {
         is_relevant:true, matches_campaign:true, fraud_detected:false,
         ai_provider: 'Service Outage',
       };
+      finalStatus = 'pending_retry';
     }
 
-    const score = aiResult.confidence_score ?? 0;
-    let finalStatus;
-    if (aiResult.decision === 'pending_retry' || aiResult.status === 'pending_retry') finalStatus = 'pending_retry';
-    else if (score >= 75) finalStatus = 'pending_admin_review';
-    else finalStatus = 'rejected';
-
-    aiResult.status = finalStatus;
     setResult(aiResult);
+    updateLocalState(aiResult, finalStatus);
 
-    try { await saveProof(fileUrls, aiResult, finalStatus); } catch(e) { console.error(e); }
-
+    const score = aiResult.confidence_score ?? 0;
     if (finalStatus === 'pending_admin_review') {
       onToast(`✅ Verification passed (${score}%) — sent to admin review`, 'success');
     } else if (finalStatus === 'pending_retry') {

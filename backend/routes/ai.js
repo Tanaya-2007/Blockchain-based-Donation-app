@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const { verifyDocument } = require('../services/ai/verifier');
+const { db, admin } = require('../firebaseAdmin');
 
 router.post('/messages', async (req, res) => {
 
@@ -73,6 +74,82 @@ router.post('/messages', async (req, res) => {
         fraud_detected:          false,
       }) }]
     });
+  }
+});
+
+router.post('/verify-milestone', async (req, res) => {
+  if (!db) {
+    return res.status(500).json({ error: 'Backend Firebase not configured' });
+  }
+
+  const {
+    imageBase64, imageType, campaignContext,
+    campaignId, campaignTitle, ngoId, ngoName, milestoneNo, fileUrls
+  } = req.body;
+
+  if (!campaignContext || !campaignId || !ngoId || !milestoneNo) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
+  try {
+    const aiResult = await verifyDocument(campaignContext, imageBase64, imageType);
+    const score = aiResult.confidence_score ?? 0;
+    
+    let finalStatus;
+    if (aiResult.decision === 'pending_retry' || aiResult.status === 'pending_retry') {
+      finalStatus = 'pending_retry';
+    } else if (score >= 75) {
+      finalStatus = 'pending_admin_review';
+    } else {
+      finalStatus = 'rejected';
+    }
+    aiResult.status = finalStatus;
+
+    if (finalStatus !== 'pending_retry') {
+      // 1. Securely save proof to DB
+      await db.collection('proofs').add({
+        campaignId,
+        campaignTitle: campaignTitle || '',
+        ngoId,
+        ngoName: ngoName || '',
+        milestoneNo: Number(milestoneNo),
+        fileUrls: fileUrls || [],
+        aiScore: score,
+        aiVerdict: aiResult.status,
+        aiSummary: aiResult.reason || '',
+        aiProvider: aiResult.ai_provider || 'Unknown',
+        status: finalStatus,
+        uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      // 2. Securely update campaign if passed
+      if (finalStatus === 'pending_admin_review') {
+        const campRef = db.collection('campaigns').doc(campaignId);
+        const campSnap = await campRef.get();
+        if (campSnap.exists) {
+          const campData = campSnap.data();
+          let milestones = Array.isArray(campData.milestones) ? campData.milestones : [];
+          if (!Array.isArray(campData.milestones) && campData.milestones) {
+             milestones = Object.keys(campData.milestones).sort((a,b) => Number(a)-Number(b)).map(k => campData.milestones[k]);
+          }
+          
+          const msIndex = Number(milestoneNo) - 1;
+          const updatedMilestones = milestones.map((m, i) => 
+            i === msIndex ? { ...m, status: 'verified' } : m
+          );
+
+          await campRef.update({
+            milestones: updatedMilestones,
+            currentMilestone: Number(milestoneNo) + 1
+          });
+        }
+      }
+    }
+
+    return res.json({ result: aiResult, finalStatus });
+  } catch (err) {
+    console.error('[AI verify-milestone error]', err);
+    return res.status(500).json({ error: err.message });
   }
 });
 
