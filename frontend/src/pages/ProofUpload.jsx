@@ -167,7 +167,11 @@ export default function ProofUpload({ onToast }) {
       onToast('⚠️ PDFs are not accepted — please upload a JPG, PNG, or WEBP image of the document.', 'error');
       return;
     }
-    setUploaded(prev => [...prev, { name: file.name, size: (file.size/1024/1024).toFixed(1)+' MB', icon: '🖼️' }]);
+    const sizeStr = file.size < 1024 * 1024 
+      ? (file.size / 1024).toFixed(0) + ' KB' 
+      : (file.size / 1024 / 1024).toFixed(1) + ' MB';
+      
+    setUploaded(prev => [...prev, { name: file.name, size: sizeStr, icon: '🖼️' }]);
     setFileObjs(prev => [...prev, file]);
     const reader = new FileReader();
     reader.onload = e => { setImgBase64(e.target.result.split(',')[1]); setImgType(file.type); };
