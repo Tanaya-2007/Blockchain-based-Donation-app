@@ -3,6 +3,7 @@ const express  = require('express');
 const Razorpay = require('razorpay');
 const crypto   = require('crypto');
 const router   = express.Router();
+const { requireAuth } = require('./middleware/auth');
 
 // Initialise Razorpay — keys from env
 const razorpay = new Razorpay({
@@ -15,7 +16,7 @@ const razorpay = new Razorpay({
    Body: { amount: number (in rupees), campaignId, campaignTitle }
    Returns: { orderId, amount, currency, keyId }
 ───────────────────────────────────────────────────────── */
-router.post('/create-order', async (req, res) => {
+router.post('/create-order', requireAuth, async (req, res) => {
   try {
     const { amount, campaignId, campaignTitle } = req.body;
 
@@ -57,7 +58,7 @@ router.post('/create-order', async (req, res) => {
    Body: { razorpay_order_id, razorpay_payment_id, razorpay_signature }
    Returns: { verified: boolean }
 ───────────────────────────────────────────────────────── */
-router.post('/verify', (req, res) => {
+router.post('/verify', requireAuth, async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 

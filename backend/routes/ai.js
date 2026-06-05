@@ -2,8 +2,9 @@ const express = require('express');
 const router  = express.Router();
 const { verifyDocument } = require('../services/ai/verifier');
 const { db, admin } = require('../firebaseAdmin');
+const { requireAuth } = require('../middleware/auth');
 
-router.post('/messages', async (req, res) => {
+router.post('/messages', requireAuth, async (req, res) => {
 
   console.log('\n╔══════════════════════════════════════════════════╗');
   console.log('║          NEW VERIFICATION REQUEST               ║');
@@ -77,7 +78,7 @@ router.post('/messages', async (req, res) => {
   }
 });
 
-router.post('/verify-milestone', async (req, res) => {
+router.post('/verify-milestone', requireAuth, async (req, res) => {
   if (!db) {
     return res.status(500).json({ error: 'Backend Firebase not configured' });
   }

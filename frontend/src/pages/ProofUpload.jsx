@@ -239,9 +239,16 @@ export default function ProofUpload({ onToast }) {
     
     try {
       if (imgBase64) {
+        // Fetch secure token
+        const token = await user.getIdToken();
+        
         // Secure backend verification and save
         const res  = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/ai/verify-milestone`, {
-          method:'POST', headers:{ 'Content-Type':'application/json' },
+          method:'POST', 
+          headers:{ 
+            'Content-Type':'application/json',
+            'Authorization': `Bearer ${token}`
+          },
           body: JSON.stringify({
             imageBase64: imgBase64,
             imageType: imgType,

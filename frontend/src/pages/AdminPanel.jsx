@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { collection, deleteDoc, doc, getDocs, orderBy, query, updateDoc, getDoc, addDoc, serverTimestamp, increment, writeBatch, where } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 
 /* ─── constants ───────────────────────────────────────── */
 const PAGE_SIZE = 10;
@@ -868,9 +868,13 @@ function ProofsTab() {
 
       // 5. Fire and forget backend queue
       const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
       fetch(`${BACKEND}/api/onchain/queue-release`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ proofId: proof.id, amount: rawAmount, campaignId: proof.campaignId })
       }).catch(e => console.log('Background queue endpoint not ready yet, graceful fallback active'));
 

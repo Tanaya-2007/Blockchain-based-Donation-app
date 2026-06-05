@@ -150,9 +150,13 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
       if (!loaded) throw new Error('Razorpay script failed to load. Check your internet connection.');
 
       /* Step 1 — create Razorpay order on backend */
+      const token = await user.getIdToken();
       const orderRes = await fetch(`${BACKEND}/api/payment/create-order`, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body:    JSON.stringify({ amount: finalAmt, campaignId: campaign.id, campaignTitle: campaign.title }),
       });
       if (!orderRes.ok) {
@@ -184,7 +188,10 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
               /* Step 3 — verify Razorpay signature */
               const verifyRes = await fetch(`${BACKEND}/api/payment/verify`, {
                 method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
                 body:    JSON.stringify({
                   razorpay_order_id:   response.razorpay_order_id,
                   razorpay_payment_id: response.razorpay_payment_id,

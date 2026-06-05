@@ -1,8 +1,9 @@
 const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
+const { requireAuth } = require('../middleware/auth');
 
-router.post('/queue-donation', (req, res) => {
+router.post('/queue-donation', requireAuth, (req, res) => {
   const { donationId, amount } = req.body;
   console.log(`[Onchain] Queuing donation ${donationId} for ${amount}...`);
 
@@ -16,7 +17,7 @@ router.post('/queue-donation', (req, res) => {
 });
 
 // Mock background queue for milestone releases to blockchain
-router.post('/queue-release', (req, res) => {
+router.post('/queue-release', requireAuth, (req, res) => {
   const { proofId, amount, campaignId } = req.body;
   console.log(`[Onchain] Queuing release of ${amount} for proof ${proofId}...`);
 
