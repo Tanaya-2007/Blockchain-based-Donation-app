@@ -876,7 +876,9 @@ function ProofsTab() {
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ proofId: proof.id, amount: rawAmount, campaignId: proof.campaignId })
-      }).catch(e => console.log('Background queue endpoint not ready yet, graceful fallback active'));
+      }).catch(() => {
+        // Silently handle backend queue errors
+      });
 
       setProofs(p => p.map(x => x.id===proof.id ? {...x,status:'approved', txHash:null, blockchainStatus:bchainStatus} : x));
       show(`✓ Milestone ${proof.milestoneNo} approved — funds released instantly`,'success');

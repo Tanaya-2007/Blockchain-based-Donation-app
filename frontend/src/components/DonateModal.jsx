@@ -234,7 +234,10 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
                   batch.update(doc(db, 'ledger', ledgerId), { blockchainStatus: 'done', blockchainTxHash: data.txHash });
                   await batch.commit();
                 }
-              }).catch(e => console.log('Background queue endpoint not ready yet, graceful fallback active'));
+              }).catch(() => {
+                // Silently handle backend queue errors so they don't clutter the console.
+                // The database is already updated, so the sync will happen later.
+              });
 
               onToast(`✅ ₹${finalAmt.toLocaleString('en-IN')} donated — locked until milestone verified`, 'success');
               resolve();
