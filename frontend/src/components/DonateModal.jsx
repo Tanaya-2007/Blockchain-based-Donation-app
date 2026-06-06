@@ -216,9 +216,15 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
               // Trigger background sync async, but wait for it to update UI
               fetch(`${BACKEND}/api/onchain/queue-donation`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
                 body: JSON.stringify({ donationId: generatedId, amount: finalAmt })
-              }).then(res => res.json()).then(async (data) => {
+              }).then(res => {
+                if (!res.ok) throw new Error(`Backend sync failed: ${res.status}`);
+                return res.json();
+              }).then(async (data) => {
                 if (data.success && data.txHash) {
                   // Backend synced successfully! Update Firestore and UI
                   setBchainStatus('done');
