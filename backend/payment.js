@@ -4,6 +4,16 @@ const Razorpay = require('razorpay');
 const crypto   = require('crypto');
 const router   = express.Router();
 const { requireAuth } = require('./middleware/auth');
+const rateLimit = require('express-rate-limit');
+
+// Payment rate limiter: 10 requests per 10 minutes
+const paymentLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many payment requests. Please wait before trying again.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Initialise Razorpay — keys from env
 const razorpay = new Razorpay({
@@ -16,7 +26,7 @@ const razorpay = new Razorpay({
    Body: { amount: number (in rupees), campaignId, campaignTitle }
    Returns: { orderId, amount, currency, keyId }
 ───────────────────────────────────────────────────────── */
-router.post('/create-order', requireAuth, async (req, res) => {
+router.post('/create-order', requireAuth, paymentLimiter, async (req, res) => {
   try {
     const { amount, campaignId, campaignTitle } = req.body;
 

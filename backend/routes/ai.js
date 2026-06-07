@@ -3,8 +3,18 @@ const router  = express.Router();
 const { verifyDocument } = require('../services/ai/verifier');
 const { db, admin } = require('../firebaseAdmin');
 const { requireAuth } = require('../middleware/auth');
+const rateLimit = require('express-rate-limit');
 
-router.post('/messages', requireAuth, async (req, res) => {
+// Strict AI rate limiter: 30 requests per hour per IP
+const aiLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 30,
+  message: { error: 'AI rate limit exceeded. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+router.post('/messages', requireAuth, aiLimiter, async (req, res) => {
 
   console.log('\n╔══════════════════════════════════════════════════╗');
   console.log('║          NEW VERIFICATION REQUEST               ║');
@@ -78,7 +88,7 @@ router.post('/messages', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/verify-milestone', requireAuth, async (req, res) => {
+router.post('/verify-milestone', requireAuth, aiLimiter, async (req, res) => {
   if (!db) {
     return res.status(500).json({ error: 'Backend Firebase not configured' });
   }

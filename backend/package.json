@@ -15,6 +15,7 @@
     "dotenv": "^16.4.5",
     "ethers": "^6.13.1",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.5.2",
     "firebase-admin": "^12.2.0",
     "razorpay": "^2.9.6",
     "tesseract.js": "^7.0.0"
