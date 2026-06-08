@@ -5,7 +5,6 @@ console.log("Gemini Key 1 :", !!process.env.GEMINI_API_KEY);
 console.log("Gemini Key 2 :", !!process.env.GEMINI_API_KEY_2);
 console.log("Gemini Key 3 :", !!process.env.GEMINI_API_KEY_3);
 console.log("GROQ Key     :", !!process.env.GROQ_API_KEY);
-console.log("Claude Key   :", !!process.env.CLAUDE_API_KEY);
 console.log("Razorpay     :", !!process.env.RAZORPAY_KEY_ID);
 console.log("=================");
 
@@ -55,7 +54,6 @@ app.get('/api/debug-ai', (req, res) => {
     gemini_key_2: !!process.env.GEMINI_API_KEY_2,
     gemini_key_3: !!process.env.GEMINI_API_KEY_3,
     groq_key:     !!process.env.GROQ_API_KEY,
-    claude_key:   !!process.env.CLAUDE_API_KEY,
     razorpay:     !!process.env.RAZORPAY_KEY_ID,
   });
 });

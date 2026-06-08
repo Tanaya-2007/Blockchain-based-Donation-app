@@ -1,5 +1,4 @@
 const { askGemini }               = require('./gemini');
-const { askClaude }               = require('./claude');
 const { askGroq }                 = require('./groq');
 const { extractTextWithOCR }      = require('./ocr');
 const { buildVerificationPrompt } = require('./prompt');
@@ -205,24 +204,16 @@ async function verifyDocument(campaignContext, base64Image, mimeType) {
     if (p) { console.log('[VERIFIER] ✅ Gemini succeeded'); return buildFinalResult(p, 'Gemini Flash'); }
   } catch(e) { console.error('[VERIFIER] ❌ Gemini exhausted:', e.message); }
 
-  // ── Step 2: Claude (Anthropic) ───────────────────────────────────────────
-  console.log('[VERIFIER] ▶ Step 2: Trying Claude...');
-  try {
-    const raw = await askClaude(fullPrompt, base64Image, mimeType);
-    const p   = sp(raw);
-    if (p) { console.log('[VERIFIER] ✅ Claude succeeded'); return buildFinalResult(p, 'Claude Sonnet'); }
-  } catch(e) { console.error('[VERIFIER] ❌ Claude failed:', e.message); }
-
-  // ── Step 3: Groq ─────────────────────────────────────────────────────────
-  console.log('[VERIFIER] ▶ Step 3: Trying Groq...');
+  // ── Step 2: Groq ─────────────────────────────────────────────────────────
+  console.log('[VERIFIER] ▶ Step 2: Trying Groq...');
   try {
     const raw = await askGroq(fullPrompt, base64Image, mimeType);
     const p   = sp(raw);
     if (p) { console.log('[VERIFIER] ✅ Groq succeeded'); return buildFinalResult(p, 'Groq Llama-4'); }
   } catch(e) { console.error('[VERIFIER] ❌ Groq failed:', e.message); }
 
-  // ── Step 4: OCR fallback ─────────────────────────────────────────────────
-  console.log('[VERIFIER] ▶ Step 4: Trying OCR fallback...');
+  // ── Step 3: OCR fallback ─────────────────────────────────────────────────
+  console.log('[VERIFIER] ▶ Step 3: Trying OCR fallback...');
   try {
     const raw = await extractTextWithOCR(base64Image);
     const p   = sp(raw);
