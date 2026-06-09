@@ -298,7 +298,7 @@ export default function ProofUpload({ onToast }) {
     if (finalStatus === 'pending_admin_review') {
       onToast(`✅ Verification passed (${score}%) — sent to admin review`, 'success');
     } else if (finalStatus === 'pending_retry') {
-      onToast('⏳ AI unavailable. Proof queued for retry.', 'warning');
+      onToast('⏳ AI unavailable. Please click Retry to try again.', 'warning');
     } else {
       onToast(`❌ Score ${score}% — below 75% threshold. Proof rejected.`, 'error');
     }
@@ -596,7 +596,7 @@ export default function ProofUpload({ onToast }) {
                       : { border:'1px solid rgba(239,68,68,0.4)', background:'rgba(239,68,68,0.08)', color:'#fca5a5' }),
                   }}>
                     {result.status==='pending_retry'
-                      ? '⏳ AI temporarily unavailable — proof queued'
+                      ? '⏳ Network/AI Error — Verification Failed'
                       : result.confidence_score>=75
                       ? '✅ Score ≥ 75% — Sent to admin for final review'
                       : `❌ Score ${result.confidence_score}% — below 75% threshold. Proof rejected.`}
@@ -620,11 +620,26 @@ export default function ProofUpload({ onToast }) {
 
                   <div style={{ padding:'10px 14px', borderRadius:'10px', border:'1px solid rgba(34,211,238,0.2)', background:'rgba(34,211,238,0.05)', fontSize:'12px', color:'#67e8f9' }}>
                     {result.status==='pending_retry'
-                      ? '📋 Queued for retry. Your proof is saved.'
+                      ? '📋 The AI verification timed out or was blocked. Please check your internet connection and try again.'
                       : result.confidence_score>=75
                       ? '📋 Proof sent to admin panel. Funds released after approval.'
                       : '📋 Submission recorded. Contact admin if you believe this is incorrect.'}
                   </div>
+
+                  {result.status === 'pending_retry' && (
+                    <button 
+                      onClick={runVerification} 
+                      disabled={verifying}
+                      style={{ 
+                        marginTop:'16px', width:'100%', padding:'12px', borderRadius:'8px', 
+                        background:'rgba(59,130,246,0.2)', border:'1px solid rgba(59,130,246,0.5)', 
+                        color:'#93c5fd', cursor: verifying ? 'not-allowed' : 'pointer', fontWeight:'bold',
+                        transition: 'background 0.2s ease'
+                      }}
+                    >
+                      {verifying ? '🔄 Retrying...' : '🔄 Retry AI Verification'}
+                    </button>
+                  )}
                 </div>
               )}
             </>
