@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, writeBatch, doc, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Link } from 'react-router-dom';
 
@@ -90,6 +90,35 @@ export default function NgoCampaignsDashboard({ user }) {
       return matchSearch && matchFilter;
     }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
   }, [enhancedCampaigns, search, filter]);
+
+  const handleDeleteCampaign = async (campaignId, title) => {
+    if (!window.confirm(`Are you sure you want to completely delete "${title}"? This cannot be undone.`)) return;
+    
+    try {
+      const batch = writeBatch(db);
+      
+      // 1. Delete associated proofs
+      const proofSnap = await getDocs(query(collection(db, 'proofs'), where('campaignId', '==', campaignId)));
+      proofSnap.forEach(d => batch.delete(d.ref));
+      
+      // 2. Delete associated ledger entries (just in case)
+      const ledgerSnap = await getDocs(query(collection(db, 'ledger'), where('campaignId', '==', campaignId)));
+      ledgerSnap.forEach(d => batch.delete(d.ref));
+      
+      // 3. Delete associated donations (just in case)
+      const donationsSnap = await getDocs(query(collection(db, 'donations'), where('campaignId', '==', campaignId)));
+      donationsSnap.forEach(d => batch.delete(d.ref));
+      
+      // 4. Delete the campaign itself
+      batch.delete(doc(db, 'campaigns', campaignId));
+      
+      await batch.commit();
+      // No need to alert success, the real-time listener will instantly remove it from the screen
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete campaign: ' + err.message);
+    }
+  };
 
   const fmt = n => `₹${(n || 0).toLocaleString('en-IN')}`;
 
@@ -247,6 +276,15 @@ export default function NgoCampaignsDashboard({ user }) {
                   <Link to="/transparency" style={{ padding: '10px 20px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '13px', fontWeight: 600, textDecoration: 'none', transition: 'background 0.2s' }}>
                     View Analytics
                   </Link>
+                  
+                  {c.raised === 0 && (
+                    <button 
+                      onClick={() => handleDeleteCampaign(c.id, c.title)} 
+                      style={{ padding: '10px 20px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', fontSize: '13px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}
+                    >
+                      🗑️ Delete Campaign
+                    </button>
+                  )}
                 </div>
 
               </div>
