@@ -163,6 +163,10 @@ export default function ProofUpload({ onToast }) {
   // ── CHANGE 2: reject non-image files immediately with a clear toast ───────
   const handleFile = file => {
     if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      onToast('⚠️ File is too large! Maximum allowed size is 5MB.', 'error');
+      return;
+    }
     if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
       onToast('⚠️ PDFs are not accepted — please upload a JPG, PNG, or WEBP image of the document.', 'error');
       return;
@@ -210,6 +214,7 @@ export default function ProofUpload({ onToast }) {
 
     for (const file of fileObjs) {
       if (file.size < 5120) { onToast(`File ${file.name} too small (<5KB).`, 'error'); return; }
+      if (file.size > 5 * 1024 * 1024) { onToast(`File ${file.name} is too large (>5MB).`, 'error'); return; }
       if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
         onToast('⚠️ Only JPG, PNG, or WEBP images are accepted. Please remove any PDF files.', 'error');
         return;
