@@ -534,7 +534,7 @@ export default function ProofUpload({ onToast }) {
                     onChange={e => Array.from(e.target.files).forEach(handleFile)}
                   />
                   <div style={{ fontSize:'32px', marginBottom:'12px' }}>🖼️</div>
-                  <div style={{ fontSize:'14px', fontWeight:600, color:'#fff', marginBottom:'4px' }}>Click or drag to upload</div>
+                  <div style={{ fontSize:'14px', fontWeight:600, color:'#fff', marginBottom:'4px' }}>Click or drag to upload (Max 5MB)</div>
                   <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.35)' }}>
                     JPG, PNG, WEBP images only · No PDFs · Score ≥ 75% required · One attempt only
                   </div>
