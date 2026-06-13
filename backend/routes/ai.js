@@ -133,7 +133,7 @@ router.post('/verify-milestone', requireAuth, aiLimiter, async (req, res) => {
         uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      // 2. Securely update campaign if passed
+      // 2. Securely update campaign if passed or handle rejection/refunds
       if (finalStatus === 'pending_admin_review') {
         const campRef = db.collection('campaigns').doc(campaignId);
         const campSnap = await campRef.get();
@@ -153,6 +153,67 @@ router.post('/verify-milestone', requireAuth, aiLimiter, async (req, res) => {
             milestones: updatedMilestones,
             currentMilestone: Number(milestoneNo) + 1
           });
+        }
+      } else if (finalStatus === 'rejected') {
+        const campRef = db.collection('campaigns').doc(campaignId);
+        const campSnap = await campRef.get();
+        if (campSnap.exists) {
+          const camp = campSnap.data();
+          const totalDonated = camp.raisedAmount || 0;
+          const releasedFunds = camp.releasedFunds || 0;
+          const lockedFunds = Math.max(0, totalDonated - releasedFunds);
+
+          const batch = db.batch();
+
+          // Mark Campaign as Halted/Rejected and adjust raisedAmount/refundedFunds
+          batch.update(campRef, {
+            status: 'halted_rejected',
+            raisedAmount: releasedFunds, // Effectively zeros out locked safety funds
+            refundedFunds: admin.firestore.FieldValue.increment(lockedFunds)
+          });
+
+          // Query and update all donations to refunded
+          if (lockedFunds > 0) {
+            const donationsSnap = await db.collection('donations')
+              .where('campaignId', '==', campaignId)
+              .get();
+
+            donationsSnap.docs.forEach(dSnap => {
+              const donation = dSnap.data();
+              const amount = donation.amount || 0;
+
+              if (amount > 0 && donation.status !== 'refunded') {
+                const refundAmount = releasedFunds === 0 
+                  ? amount 
+                  : Math.floor(amount * (lockedFunds / totalDonated));
+
+                if (refundAmount > 0) {
+                  const refundStatus = releasedFunds === 0 ? 'Full Refund' : 'Partial Refund';
+                  batch.update(dSnap.ref, {
+                    status: 'refunded',
+                    refundStatus: refundStatus,
+                    refundedAmount: refundAmount
+                  });
+
+                  // Add Ledger Entry
+                  const ledgerRef = db.collection('ledger').doc();
+                  batch.set(ledgerRef, {
+                    type: 'refund',
+                    reason: `Milestone ${milestoneNo} AI Rejected`,
+                    amount: refundAmount,
+                    campaignId: campaignId,
+                    campaignTitle: campaignTitle || camp.title || 'Unknown',
+                    donorId: donation.donorId || 'anonymous',
+                    donorName: donation.donorName || 'Anonymous',
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                    status: 'Refund Processed'
+                  });
+                }
+              }
+            });
+          }
+
+          await batch.commit();
         }
       }
     }

@@ -254,14 +254,18 @@ export default function NgoCampaignsDashboard({ user }) {
                 </div>
 
                 {/* Smart Actions */}
-                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                  {c.proofStatus === 'rejected' && (
+                <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', width: '100%' }}>
+                  {c.status === 'Refunded / Halted' ? (
+                    <div style={{ padding: '8px 16px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                      🚫 Campaign Halted: Milestone Proof Rejected & Funds Refunded
+                    </div>
+                  ) : c.proofStatus === 'rejected' ? (
                     <div style={{ padding: '8px 16px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', color: '#fca5a5', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
                       ⚠️ Proof Rejected — Re-upload required
                     </div>
-                  )}
+                  ) : null}
 
-                  {(c.proofStatus === 'pending_upload' || c.proofStatus === 'rejected') && (
+                  {c.status !== 'Refunded / Halted' && (c.proofStatus === 'pending_upload' || c.proofStatus === 'rejected') && (
                     <Link to="/proof" state={{ campaignId: c.id }} style={{ padding: '10px 20px', borderRadius: '10px', background: 'linear-gradient(135deg,#f59e0b,#ea580c)', color: '#fff', fontSize: '13px', fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 12px rgba(245,158,11,0.3)' }}>
                       📄 Upload Milestone Proof
                     </Link>
@@ -277,7 +281,7 @@ export default function NgoCampaignsDashboard({ user }) {
                     View Analytics
                   </Link>
                   
-                  {c.raised === 0 && (
+                  {(c.raised === 0 || c.status === 'Refunded / Halted') && (
                     <button 
                       onClick={() => handleDeleteCampaign(c.id, c.title)} 
                       style={{ padding: '10px 20px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', fontSize: '13px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}
