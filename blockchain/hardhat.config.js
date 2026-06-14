@@ -7,26 +7,30 @@ module.exports = {
     version: "0.8.28",
     settings: {
       optimizer: {
-        enabled: true,   // smaller bytecode = lower gas on deployment
+        enabled: true,
         runs: 200,
       },
     },
   },
 
   networks: {
-    // ── local dev (npx hardhat node) ──────────────────────────────────────
     localhost: {
       url: "http://127.0.0.1:8545",
     },
 
-    // ── Polygon Amoy testnet (use for hackathon demo) ─────────────────────
+    // ── Sepolia Testnet ───────────────────────────────────
+    sepolia: {
+      url:      process.env.SEPOLIA_RPC_URL || "",
+      accounts: process.env.PRIVATE_KEY ? [`0x${process.env.PRIVATE_KEY.replace(/^0x/, "")}`] : [],
+      chainId:  11155111,
+    },
+
     amoy: {
-      url:      process.env.AMOY_RPC_URL   || "",
+      url:      process.env.AMOY_RPC_URL || "",
       accounts: process.env.PRIVATE_KEY ? [`0x${process.env.PRIVATE_KEY.replace(/^0x/, "")}`] : [],
       chainId:  80002,
     },
 
-    // ── Polygon Mainnet (production — only use when ready) ────────────────
     polygon: {
       url:      process.env.POLYGON_RPC_URL || "https://polygon-rpc.com",
       accounts: process.env.PRIVATE_KEY ? [`0x${process.env.PRIVATE_KEY.replace(/^0x/, "")}`] : [],
@@ -34,10 +38,9 @@ module.exports = {
     },
   },
 
-  // ── Polygonscan verification (shows readable source on block explorer) ──
-  // Get free API key: https://polygonscan.com/myapikey
   etherscan: {
     apiKey: {
+      sepolia:         process.env.ETHERSCAN_API_KEY || "",
       polygon:         process.env.POLYGONSCAN_API_KEY || "",
       polygonAmoy:     process.env.POLYGONSCAN_API_KEY || "",
     },
@@ -53,7 +56,6 @@ module.exports = {
     ],
   },
 
-  // ── gas reporter (optional — shows gas cost of each function) ──────────
   gasReporter: {
     enabled:  process.env.REPORT_GAS === "true",
     currency: "USD",

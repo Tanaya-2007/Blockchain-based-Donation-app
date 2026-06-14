@@ -40,12 +40,12 @@ export const getContract = async (withSigner = false) => {
 async function checkNetwork() {
   const provider = getProvider();
   const network  = await provider.getNetwork();
-  // Accept Hardhat local (31337) or Polygon Amoy (80002)
-  if (network.chainId !== 31337n && network.chainId !== 80002n) {
-    throw new Error(
-      "Wrong network. Please switch MetaMask to Localhost 8545 (chainId 31337) or Polygon Amoy (80002)."
-    );
-  }
+  // Accept Sepolia (11155111)
+  if (network.chainId !== 11155111n) {
+  throw new Error(
+    "Wrong network. Please switch MetaMask to Sepolia Test Network (chainId 11155111)."
+  );
+}
   return network.chainId;
 }
 
