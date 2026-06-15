@@ -359,7 +359,7 @@ export default function Ledger() {
 
                       <td style={{ padding:'16px 24px', fontFamily:'monospace', fontSize:'12px' }}>
                         {e.hash?.startsWith('0x') ? (
-                          <a href={`https://amoy.polygonscan.com/tx/${e.hash}`} target="_blank" rel="noreferrer"
+                          <a href={`https://sepolia.etherscan.io/tx/${e.hash}`} target="_blank" rel="noreferrer"
                             style={{ color:'#a78bfa', textDecoration:'none' }}
                             onMouseOver={ev => ev.target.style.color='#c4b5fd'}
                             onMouseOut={ev  => ev.target.style.color='#a78bfa'}>

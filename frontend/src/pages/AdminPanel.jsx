@@ -1069,7 +1069,7 @@ function ProofsTab() {
                   <div style={{ marginTop: '20px', fontSize: '13px', color: '#c4b5fd', background: 'rgba(124,58,237,0.1)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(124,58,237,0.3)' }}>
                     🔒 <strong style={{ color: '#fff' }}>Blockchain Tx:</strong> <span style={{ fontFamily: 'monospace', opacity: 0.8, marginLeft: '8px' }}>{proof.txHash}</span>
                     {proof.txHash.startsWith('0x') && (
-                      <a href={`https://amoy.polygonscan.com/tx/${proof.txHash}`} target="_blank" rel="noreferrer" style={{ marginLeft: '12px', color: '#34d399', textDecoration: 'none', fontWeight: 'bold', display: 'inline-block', padding: '4px 10px', background: 'rgba(52,211,153,0.1)', borderRadius: '6px', border: '1px solid rgba(52,211,153,0.2)' }}>Explorer ↗</a>
+                      <a href={`https://sepolia.etherscan.io/tx/${proof.txHash}`} target="_blank" rel="noreferrer" style={{ marginLeft: '12px', color: '#34d399', textDecoration: 'none', fontWeight: 'bold', display: 'inline-block', padding: '4px 10px', background: 'rgba(52,211,153,0.1)', borderRadius: '6px', border: '1px solid rgba(52,211,153,0.2)' }}>Explorer ↗</a>
                     )}
                   </div>
                 )}

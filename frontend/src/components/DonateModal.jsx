@@ -420,7 +420,7 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '6px 16px', borderRadius: '999px', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.4)', color: '#34d399', fontSize: '12px', fontWeight: 700 }}>
-                    Synced to Polygon ✅
+                    Synced to Sepolia ✅
                   </div>
                   <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', fontFamily: 'monospace' }}>
                     Tx: {bchainTxHash.slice(0, 10)}...{bchainTxHash.slice(-8)}
@@ -436,7 +436,7 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
             </div>
 
             <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.4)', marginBottom:'20px', lineHeight: 1.5 }}>
-              Your donation is secured. Our backend treasury will automatically sync this transaction to the Polygon blockchain without requiring any gas fees or MetaMask from you.
+              Your donation is secured. Our backend treasury will automatically sync this transaction to the Sepolia blockchain without requiring any gas fees or MetaMask from you.
             </div>
 
             <button onClick={onClose} style={{ width:'100%', padding:'13px', borderRadius:'12px', border:'1px solid rgba(255,255,255,0.1)', background:'rgba(255,255,255,0.07)', color:'#fff', fontWeight:700, fontSize:'14px', cursor:'pointer', transition: 'background 0.2s' }}
