@@ -168,6 +168,7 @@ router.post('/verify-milestone', requireAuth, aiLimiter, async (req, res) => {
           // Mark Campaign as Halted/Rejected and adjust raisedAmount/refundedFunds
           batch.update(campRef, {
             status: 'halted_rejected',
+            haltedAt: admin.firestore.FieldValue.serverTimestamp(),
             raisedAmount: releasedFunds, // Effectively zeros out locked safety funds
             refundedFunds: admin.firestore.FieldValue.increment(lockedFunds)
           });
@@ -183,12 +184,10 @@ router.post('/verify-milestone', requireAuth, aiLimiter, async (req, res) => {
               const amount = donation.amount || 0;
 
               if (amount > 0 && donation.status !== 'refunded') {
-                const refundAmount = releasedFunds === 0 
-                  ? amount 
-                  : Math.floor(amount * (lockedFunds / totalDonated));
+                const refundAmount = amount; // Always refund the full amount
 
                 if (refundAmount > 0) {
-                  const refundStatus = releasedFunds === 0 ? 'Full Refund' : 'Partial Refund';
+                  const refundStatus = 'Full Refund';
                   batch.update(dSnap.ref, {
                     status: 'refunded',
                     refundStatus: refundStatus,

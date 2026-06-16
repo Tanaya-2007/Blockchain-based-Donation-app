@@ -908,6 +908,7 @@ function ProofsTab() {
       // Mark Campaign as Rejected/Halted and reduce raised amount by refunded amount
       batch.update(campRef, { 
         status: 'halted_rejected',
+        haltedAt: new Date(),
         raisedAmount: releasedFunds, // Effectively zeros out locked funds
         refundedFunds: increment(lockedFunds)
       });
@@ -921,14 +922,11 @@ function ProofsTab() {
           const amount = donation.amount || 0;
           
           if (amount > 0 && donation.status !== 'refunded') {
-            // Calculate proportional refund based on locked funds
-            const refundAmount = releasedFunds === 0 
-              ? amount // Case 1: Full Refund
-              : Math.floor(amount * (lockedFunds / totalDonated)); // Case 2: Partial Refund
+            const refundAmount = amount; // Always refund the full amount
 
             if (refundAmount > 0) {
               // Update Donation Status
-              const refundStatus = releasedFunds === 0 ? 'Full Refund' : 'Partial Refund';
+              const refundStatus = 'Full Refund';
               batch.update(dSnap.ref, { 
                 status: 'refunded', 
                 refundStatus: refundStatus,

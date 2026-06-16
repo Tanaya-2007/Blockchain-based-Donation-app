@@ -1,11 +1,12 @@
 import { useEffect, useState, useMemo } from 'react';
-import { collection, query, where, onSnapshot, writeBatch, doc, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, writeBatch, doc, getDocs, addDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Link } from 'react-router-dom';
 
 export default function NgoCampaignsDashboard({ user }) {
   const [campaigns, setCampaigns] = useState([]);
   const [proofs, setProofs] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
@@ -26,9 +27,18 @@ export default function NgoCampaignsDashboard({ user }) {
       setProofs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
+    // Real-time listen to this NGO's notifications
+    const unsubNotifs = onSnapshot(
+      query(collection(db, 'notifications'), where('ngoId', '==', user.uid), where('read', '==', false)),
+      (snap) => {
+        setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }
+    );
+
     return () => {
       unsubCamps();
       unsubProofs();
+      unsubNotifs();
     };
   }, [user?.uid]);
 
@@ -72,11 +82,18 @@ export default function NgoCampaignsDashboard({ user }) {
         ? Math.max(0, Math.ceil((c.deadline.seconds * 1000 - Date.now()) / 86400000))
         : null;
 
+      let hoursLeft = null;
+      if (c.status === 'halted_rejected' && c.haltedAt?.seconds) {
+        const elapsedMs = Date.now() - (c.haltedAt.seconds * 1000);
+        const remainingMs = (24 * 60 * 60 * 1000) - elapsedMs;
+        hoursLeft = Math.max(0, Math.ceil(remainingMs / (60 * 60 * 1000)));
+      }
+
       return {
         ...c,
         raised, target, released, locked, remainingTarget, donors,
         completedMilestones, totalMilestones, nextMilestoneAmt, currentMilestoneIdx,
-        proofStatus, status, daysRemaining,
+        proofStatus, status, daysRemaining, hoursLeft,
         milestonesArr: milestones
       };
     });
@@ -120,6 +137,55 @@ export default function NgoCampaignsDashboard({ user }) {
     }
   };
 
+  // Auto-delete halted campaigns after 24 hours
+  useEffect(() => {
+    if (!user || campaigns.length === 0) return;
+
+    campaigns.forEach(async (c) => {
+      if (c.status === 'halted_rejected' && c.haltedAt?.seconds) {
+        const elapsedMs = Date.now() - (c.haltedAt.seconds * 1000);
+        const limitMs = 24 * 60 * 60 * 1000;
+        
+        if (elapsedMs >= limitMs) {
+          console.log(`[Auto-Delete] Halted campaign "${c.title}" is older than 24 hours. Auto-deleting...`);
+          
+          try {
+            const batch = writeBatch(db);
+            
+            // 1. Delete associated proofs
+            const proofSnap = await getDocs(query(collection(db, 'proofs'), where('campaignId', '==', c.id)));
+            proofSnap.docs.forEach(docSnap => batch.delete(docSnap.ref));
+            
+            // 2. Delete associated ledger entries
+            const ledgerSnap = await getDocs(query(collection(db, 'ledger'), where('campaignId', '==', c.id)));
+            ledgerSnap.docs.forEach(docSnap => batch.delete(docSnap.ref));
+            
+            // 3. Delete associated donations
+            const donationsSnap = await getDocs(query(collection(db, 'donations'), where('campaignId', '==', c.id)));
+            donationsSnap.docs.forEach(docSnap => batch.delete(docSnap.ref));
+            
+            // 4. Delete campaign itself
+            batch.delete(doc(db, 'campaigns', c.id));
+            
+            // 5. Add notification warning
+            const notifRef = collection(db, 'notifications');
+            await addDoc(notifRef, {
+              ngoId: user.uid,
+              message: `⚠️ Notice: Campaign "${c.title}" was auto-deleted because you did not delete it within 24 hours of milestone rejection.`,
+              createdAt: serverTimestamp(),
+              read: false
+            });
+            
+            await batch.commit();
+            console.log(`[Auto-Delete] Campaign "${c.title}" successfully auto-deleted.`);
+          } catch (err) {
+            console.error("Auto delete failed for campaign:", c.id, err);
+          }
+        }
+      }
+    });
+  }, [campaigns, user]);
+
   const fmt = n => `₹${(n || 0).toLocaleString('en-IN')}`;
 
   if (loading) return <div style={{ padding: '80px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>Syncing campaigns...</div>;
@@ -140,6 +206,27 @@ export default function NgoCampaignsDashboard({ user }) {
           + New Campaign
         </Link>
       </div>
+
+      {/* Notifications banner */}
+      {notifications.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+          {notifications.map(n => (
+            <div key={n.id} style={{ padding: '14px 20px', borderRadius: '12px', border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.08)', color: '#fca5a5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+              <span style={{ fontSize: '13px', fontWeight: 600 }}>{n.message}</span>
+              <button 
+                onClick={async () => {
+                  try {
+                    await updateDoc(doc(db, 'notifications', n.id), { read: true });
+                  } catch(e) { console.error("Failed to dismiss notification", e); }
+                }}
+                style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '14px', cursor: 'pointer', fontWeight: 700 }}
+              >
+                ✕ Dismiss
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Filters & Search */}
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', marginBottom: '28px', flexWrap: 'wrap', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
@@ -256,8 +343,13 @@ export default function NgoCampaignsDashboard({ user }) {
                 {/* Smart Actions */}
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', width: '100%' }}>
                   {c.status === 'Refunded / Halted' ? (
-                    <div style={{ padding: '8px 16px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
-                      🚫 Campaign Halted: Milestone Proof Rejected & Funds Refunded
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', marginBottom: '6px' }}>
+                      <div style={{ padding: '8px 16px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                        🚫 Campaign Halted: Milestone Proof Rejected & Funds Refunded
+                      </div>
+                      <div style={{ fontSize: '12.5px', color: '#fbbf24', fontWeight: 600, paddingLeft: '4px', lineHeight: 1.5 }}>
+                        ⚠️ Action Required: Please delete this campaign. It will be automatically deleted in <strong>{c.hoursLeft ?? 24} hours</strong>.
+                      </div>
                     </div>
                   ) : c.proofStatus === 'rejected' ? (
                     <div style={{ padding: '8px 16px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', color: '#fca5a5', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
