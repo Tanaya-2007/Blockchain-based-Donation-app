@@ -181,7 +181,7 @@ export default function Dashboard() {
     });
   }, [campaigns, filterTab]);
 
-  const fmt = n => `₹${(n || 0).toLocaleString('en-IN')}`;
+  const fmt = n => `₹${(n || 0).toLocaleString('en-IN')} (~$${Math.round((n || 0) / 83)} USDC)`;
   
   const STATS = [
     { label: 'Total Donated',        val: fmt(totalDonated),      icon: '💎', color: '#a78bfa' },
@@ -251,7 +251,7 @@ export default function Dashboard() {
                       <RechartsTooltip 
                         contentStyle={{ background: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }}
                         itemStyle={{ color: '#c4b5fd', fontWeight: 700 }}
-                        formatter={(val) => [`₹${val.toLocaleString('en-IN')}`, 'Donated']}
+                        formatter={(val) => [`₹${val.toLocaleString('en-IN')} (~$${Math.round(val/83)} USDC)`, 'Donated']}
                       />
                       <Area type="monotone" dataKey="amount" stroke="#a78bfa" strokeWidth={3} fillOpacity={1} fill="url(#colorAmt)" />
                     </AreaChart>
@@ -328,14 +328,14 @@ export default function Dashboard() {
                     <RechartsTooltip 
                       contentStyle={{ background: '#0a0c1a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
                       itemStyle={{ fontWeight: 800, color: '#fff' }}
-                      formatter={(val) => [`₹${val.toLocaleString('en-IN')}`, '']}
+                      formatter={(val) => [`₹${val.toLocaleString('en-IN')} (~$${Math.round(val/83)} USDC)`, '']}
                     />
                   </PieChart>
                 </ResponsiveContainer>
                 
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '1px' }}>Total Vault</div>
-                   <div style={{ fontSize: '28px', fontWeight: 900, color: '#fff', marginTop: '4px' }}>₹{(pieTotal/1000).toFixed(0)}k+</div>
+                   <div style={{ fontSize: '28px', fontWeight: 900, color: '#fff', marginTop: '4px' }}>₹{(pieTotal/1000).toFixed(0)}k+<br/><span style={{ fontSize:'12px', opacity:0.6 }}>~$${Math.round(pieTotal/83).toLocaleString('en-US')}</span></div>
                 </div>
               </div>
             </div>
@@ -390,11 +390,11 @@ export default function Dashboard() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
                         <div>
                           <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Released</div>
-                          <div style={{ fontSize: '16px', fontWeight: 800, color: '#10b981' }}>₹{released.toLocaleString('en-IN')}</div>
+                          <div style={{ fontSize: '16px', fontWeight: 800, color: '#10b981' }}>₹{released.toLocaleString('en-IN')}<br/><span style={{ fontSize:'12px', opacity:0.6 }}>~$${Math.round(released/83)} USDC</span></div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Locked (Safety)</div>
-                          <div style={{ fontSize: '16px', fontWeight: 800, color: '#fbbf24' }}>₹{locked.toLocaleString('en-IN')}</div>
+                          <div style={{ fontSize: '16px', fontWeight: 800, color: '#fbbf24' }}>₹{locked.toLocaleString('en-IN')}<br/><span style={{ fontSize:'12px', opacity:0.6 }}>~$${Math.round(locked/83)} USDC</span></div>
                         </div>
                       </div>
                     </div>

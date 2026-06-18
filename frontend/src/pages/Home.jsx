@@ -5,11 +5,11 @@ const STEPS = [
   { icon: '🔒', title: 'Funds Escrow Locked', desc: 'Donations locked safely in smart contracts. Zero manual interference.' },
   { icon: '📄', title: 'Milestone Proof Upload', desc: 'NGOs submit hospital bills & receipts for each phase of the project.' },
   { icon: '⚡', title: 'Gemini AI Verification', desc: 'Google Gemini 2.5 Flash analyzes documents for fraud and authenticity.' },
-  { icon: '💸', title: 'Smart Release & Refund', desc: 'Passed? Funds released on Polygon. Failed? Donors get proportional refunds.' },
+  { icon: '💸', title: 'Smart Release & Refund', desc: 'Passed? Funds released on Sepolia. Failed? Donors get proportional refunds.' },
 ];
 
 const STATS = [
-  { num: '₹2,900 Cr+', desc: 'Raised annually in India with near-zero post-donation accountability.' },
+  { num: '₹2,900 Cr+ (~$350M)', desc: 'Raised annually in India with near-zero post-donation accountability.' },
   { num: '10–15%', desc: 'Platform fee cuts taken before the patient sees a single rupee.' },
   { num: '100%', desc: 'Transparency achieved through Gemini AI and immutable blockchain ledgers.' },
 ];

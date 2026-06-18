@@ -725,7 +725,7 @@ export default function NgoDashboard() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px', marginBottom: '28px' }}>
           {[
             { label: 'Active campaigns', val: campaigns.filter(c => c.status === 'active').length.toString(), color: '#a78bfa' },
-            { label: 'Total raised', val: `₹${totalRaised.toLocaleString('en-IN')}`, color: '#22d3ee' },
+            { label: 'Total raised', val: `₹${totalRaised.toLocaleString('en-IN')} (~$${Math.round(totalRaised / 83)} USDC)`, color: '#22d3ee' },
             { label: 'Total donors', val: campaigns.reduce((s, c) => s + (c.donorCount || 0), 0).toString(), color: '#34d399' },
           ].map(s => (
             <div key={s.label} style={{ borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', background: '#0d1021', padding: '20px', textAlign: 'center' }}>
@@ -750,10 +750,10 @@ export default function NgoDashboard() {
                     <div style={{ height: '4px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: '4px' }}>
                       <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg,#7c3aed,#0891b2)', borderRadius: '4px' }} />
                     </div>
-                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>₹{remaining.toLocaleString('en-IN')} remaining of ₹{target.toLocaleString('en-IN')}</div>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>₹{remaining.toLocaleString('en-IN')} (~${Math.round(remaining / 83)} USDC) remaining of ₹{target.toLocaleString('en-IN')} (~${Math.round(target / 83)} USDC)</div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#22d3ee' }}>₹{raised.toLocaleString('en-IN')}</div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#22d3ee' }}>₹{raised.toLocaleString('en-IN')} (~${Math.round(raised / 83)} USDC)</div>
                     <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>{pct}% raised</div>
                   </div>
                 </div>

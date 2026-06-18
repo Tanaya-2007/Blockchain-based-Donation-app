@@ -824,7 +824,7 @@ function ProofsTab() {
       const currentlyReleased = campData.releasedFunds || 0;
       
       if (currentlyReleased + rawAmount > totalRaised) {
-        throw new Error(`Cannot release ₹${rawAmount.toLocaleString('en-IN')}. Only ₹${Math.max(0, totalRaised - currentlyReleased).toLocaleString('en-IN')} locked funds available.`);
+        throw new Error(`Cannot release $${rawAmount.toLocaleString('en-US')} USDC. Only $${Math.max(0, totalRaised - currentlyReleased).toLocaleString('en-US')} USDC locked funds available.`);
       }
 
       // 2. Blockchain call gracefully queued to backend treasury
@@ -953,8 +953,22 @@ function ProofsTab() {
 
       await batch.commit();
 
+      // Trigger backend on-chain refund queue
+      const BACKEND = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+      const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+      fetch(`${BACKEND}/api/onchain/queue-refund`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ campaignId: proof.campaignId })
+      }).catch(err => {
+        console.error("Failed to queue on-chain refund:", err);
+      });
+
       setProofs(p => p.map(x => x.id === proof.id ? { ...x, status: 'rejected' } : x));
-      show(`Milestone ${proof.milestoneNo} rejected. ${lockedFunds > 0 ? `₹${lockedFunds.toLocaleString('en-IN')} locked funds refunded.` : ''}`, 'warning');
+      show(`Milestone ${proof.milestoneNo} rejected. ${lockedFunds > 0 ? `$${lockedFunds.toLocaleString('en-US')} USDC refunded.` : ''}`, 'warning');
     } catch(e) { 
       console.error(e);
       show(e.message, 'error'); 

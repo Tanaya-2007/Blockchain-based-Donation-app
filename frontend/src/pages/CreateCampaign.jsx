@@ -245,6 +245,11 @@ export default function CreateCampaign() {
                 onBlur={() => setTouched(t => ({ ...t, targetAmount:true }))}
                 placeholder="e.g. 300000"
                 style={getErr('targetAmount') && touched.targetAmount ? ERR_B : BASE} />
+              {form.targetAmount && !getErr('targetAmount') && (
+                <div style={{ fontSize:'12px', color:'#22d3ee', marginTop:'6px', fontWeight:600 }}>
+                  💡 Equivalent to ~${Math.round(Number(form.targetAmount) / 83)} USDC on-chain target
+                </div>
+              )}
             </Field>
           </div>
 
@@ -269,7 +274,7 @@ export default function CreateCampaign() {
                 {msPreview.map((m, i) => (
                   <div key={i} style={{ padding:'8px 14px', borderRadius:'10px', background:'rgba(34,211,238,0.1)', border:'1px solid rgba(34,211,238,0.2)', fontSize:'12px', fontWeight:600, color:'#67e8f9' }}>
                     <span style={{ opacity:0.6 }}>M{i+1}  </span>
-                    ₹{m.amount.toLocaleString('en-IN')}
+                    ₹{m.amount.toLocaleString('en-IN')} (~${Math.round(m.amount / 83)} USDC)
                   </div>
                 ))}
               </div>

@@ -1,124 +1,97 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
-/**
- * @title  TransparentFund
- * @notice Locks donor ETH per campaign and releases it to NGO wallets
- *         only when the owner (platform) approves a milestone.
- *
- * CHANGES vs original (minimal — same behaviour):
- *   1. transfer() replaced with call() — avoids 2300-gas revert on contract wallets
- *   2. Explicit address(this).balance guard before transfer
- *   3. receive() added so contract can accept plain ETH sends
- *   4. releaseMilestone emits amount in wei (unchanged) — added natspec comments
- */
+interface IERC20 {
+    function transfer(address to, uint256 value) external returns (bool);
+    function transferFrom(address from, address to, uint256 value) external returns (bool);
+    function balanceOf(address account) external view returns (uint256);
+}
+
 contract TransparentFund {
-
-    /* ─── data structures ──────────────────────────────── */
-
     struct Campaign {
-        string  campaignId;
-        uint256 totalLocked;    // ETH currently held for this campaign (wei)
-        uint256 totalReleased;  // ETH already sent to NGO wallets (wei)
+        string campaignId;
+        uint256 totalLocked;    // USDC amount locked (6 decimals)
+        uint256 totalReleased;  // USDC amount released (6 decimals)
+        bool exists;
     }
 
-    /* ─── state ─────────────────────────────────────────── */
-
-    mapping(string => Campaign) public campaigns;
     address public owner;
+    IERC20 public usdcToken;
+    mapping(string => Campaign) public campaigns;
 
-    /* ─── events ─────────────────────────────────────────── */
-
-    event DonationLocked(
-        string indexed campaignId,
-        address indexed donor,
-        uint256 amount
-    );
-    event MilestoneReleased(
-        string indexed campaignId,
-        address indexed ngoWallet,
-        uint256 amount
-    );
-
-    /* ─── modifiers ──────────────────────────────────────── */
+    event DonationLocked(string indexed campaignId, address indexed donor, uint256 amount);
+    event MilestoneReleased(string indexed campaignId, address indexed ngoWallet, uint256 amount);
+    event CampaignRefunded(string indexed campaignId, address indexed donor, uint256 amount);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner can call this");
         _;
     }
 
-    /* ─── constructor ────────────────────────────────────── */
-
-    constructor() {
+    constructor(address _usdcToken) {
         owner = msg.sender;
+        usdcToken = IERC20(_usdcToken);
     }
 
-    /* ─── receive plain ETH (e.g. MetaMask direct send) ──── */
-
-    // FIX 3: allows contract to accept plain ETH without data
-    receive() external payable {}
-
-    /* ─── donor function ─────────────────────────────────── */
-
-    /**
-     * @notice Lock ETH for a campaign. Call with msg.value > 0.
-     * @param  _campaignId  Firestore campaign document ID (string)
-     */
-    function donate(string memory _campaignId) public payable {
+    function donate(string memory _campaignId, uint256 _amount) public {
+        require(_amount > 0, "Amount must be greater than zero");
+        
         Campaign storage campaign = campaigns[_campaignId];
-
-        // Auto-create campaign record on first donation or zero-value initialization
-        if (bytes(campaign.campaignId).length == 0) {
+        if (!campaign.exists) {
             campaign.campaignId = _campaignId;
+            campaign.exists = true;
         }
 
-        if (msg.value > 0) {
-            campaign.totalLocked += msg.value;
-            emit DonationLocked(_campaignId, msg.sender, msg.value);
-        }
+        // Pull USDC from donor/treasury to contract
+        require(usdcToken.transferFrom(msg.sender, address(this), _amount), "USDC transfer failed");
+        
+        campaign.totalLocked += _amount;
+        emit DonationLocked(_campaignId, msg.sender, _amount);
     }
 
-    /* ─── owner function (milestone approval) ────────────── */
-
-    /**
-     * @notice Release locked ETH to an NGO wallet after milestone approval.
-     *         Only the platform owner can call this.
-     * @param  _campaignId  Campaign to release from
-     * @param  _ngoWallet   NGO's receiving wallet address
-     * @param  _amount      Amount in wei to release
-     */
     function releaseMilestone(
         string memory _campaignId,
-        address payable _ngoWallet,
+        address _ngoWallet,
         uint256 _amount
-    ) public {
+    ) public onlyOwner {
         Campaign storage campaign = campaigns[_campaignId];
-
-        require(bytes(campaign.campaignId).length > 0, "Campaign does not exist");
+        require(campaign.exists, "Campaign does not exist");
         require(campaign.totalLocked >= _amount, "Insufficient locked funds");
 
-        // FIX 2: also guard against actual contract balance (defensive check)
-        require(address(this).balance >= _amount, "Contract balance too low");
-
-        // State updated BEFORE transfer (correct order — prevents reentrancy)
-        campaign.totalLocked  -= _amount;
+        campaign.totalLocked -= _amount;
         campaign.totalReleased += _amount;
 
-        // FIX 1: use call() instead of transfer() — no 2300-gas limit
-        (bool sent, ) = _ngoWallet.call{value: _amount}("");
-        require(sent, "ETH transfer to NGO wallet failed");
+        // Transfer USDC to NGO
+        require(usdcToken.transfer(_ngoWallet, _amount), "USDC transfer to NGO failed");
 
         emit MilestoneReleased(_campaignId, _ngoWallet, _amount);
     }
 
-    /* ─── view functions ─────────────────────────────────── */
+    // Distributes refunds to donors on-chain
+    function refundCampaign(
+        string memory _campaignId,
+        address[] memory _donors,
+        uint256[] memory _amounts
+    ) public onlyOwner {
+        Campaign storage campaign = campaigns[_campaignId];
+        require(campaign.exists, "Campaign does not exist");
+        require(_donors.length == _amounts.length, "Array length mismatch");
 
-    /**
-     * @notice Get campaign stats. Free to call (no gas).
-     * @return campaignId    The stored campaign ID string
-     * @return totalLocked   ETH still locked (wei)
-     * @return totalReleased ETH already released to NGO (wei)
-     */
+        uint256 totalRefund;
+        for (uint256 i = 0; i < _donors.length; i++) {
+            address donor = _donors[i];
+            uint256 amount = _amounts[i];
+            if (donor != address(0) && amount > 0) {
+                totalRefund += amount;
+                require(usdcToken.transfer(donor, amount), "USDC refund transfer failed");
+                emit CampaignRefunded(_campaignId, donor, amount);
+            }
+        }
+
+        require(campaign.totalLocked >= totalRefund, "Refund amount exceeds locked balance");
+        campaign.totalLocked -= totalRefund;
+    }
+
     function getCampaign(string memory _campaignId)
         public
         view
@@ -128,10 +101,7 @@ contract TransparentFund {
         return (campaign.campaignId, campaign.totalLocked, campaign.totalReleased);
     }
 
-    /**
-     * @notice Total ETH held in this contract across all campaigns.
-     */
     function contractBalance() public view returns (uint256) {
-        return address(this).balance;
+        return usdcToken.balanceOf(address(this));
     }
 }

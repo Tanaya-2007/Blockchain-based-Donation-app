@@ -37,7 +37,12 @@ function fmtDate(ts) {
   });
 }
 
-function fmtAmt(n) { return n ? `₹${Number(n).toLocaleString('en-IN')}` : '—'; }
+function fmtAmt(n) { 
+  if (!n) return '—';
+  const inr = Number(n);
+  const usd = Math.round(inr / 83);
+  return `₹${inr.toLocaleString('en-IN')} (~$${usd} USDC)`;
+}
 
 // ── Derive correct donation status ───────────────────────────────────────
 // Donations are LOCKED until admin approves a milestone release.
@@ -128,6 +133,7 @@ export default function Ledger() {
             time: fmtDate(data.createdAt),
             ts:   data.createdAt?.seconds || 0,
             hash: data.blockchainTxHash || fakeTxHash(d.id),
+            blockchainStatus: data.blockchainStatus || 'done',
             // Status computed in render using campaignMap (see below)
             rawData: data,
           };
@@ -152,6 +158,7 @@ export default function Ledger() {
             time: fmtDate(data.uploadedAt),
             ts:   data.uploadedAt?.seconds || 0,
             hash: data.txHash || fakeTxHash(d.id),
+            blockchainStatus: data.blockchainStatus || 'done',
             status: data.status === 'approved' ? 'Verified'
                   : data.status === 'rejected' ? 'Rejected'
                   : 'Pending',
@@ -180,6 +187,7 @@ export default function Ledger() {
             time: fmtDate(data.timestamp || data.createdAt),
             ts:   (data.timestamp?.seconds) || (data.createdAt?.seconds) || 0,
             hash: data.txHash || fakeTxHash(d.id),
+            blockchainStatus: data.blockchainStatus || 'done',
             status: isRefund ? 'Refunded' : 'Released',
           };
         }).filter(Boolean);
@@ -260,9 +268,9 @@ export default function Ledger() {
       {/* Summary Stats */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'16px', marginBottom:'28px' }}>
         {[
-          { label:'Total Donated',   val: `₹${stats.totalDonated.toLocaleString('en-IN')}`,  color:'#a78bfa', icon:'💎' },
-          { label:'Funds Locked',    val: `₹${stats.totalLocked.toLocaleString('en-IN')}`,   color:'#fbbf24', icon:'🔒' },
-          { label:'Funds Released',  val: `₹${stats.totalReleased.toLocaleString('en-IN')}`, color:'#34d399', icon:'✅' },
+          { label:'Total Donated',   val: `₹${stats.totalDonated.toLocaleString('en-IN')} (~$${Math.round(stats.totalDonated / 83)} USDC)`,  color:'#a78bfa', icon:'💎' },
+          { label:'Funds Locked',    val: `₹${stats.totalLocked.toLocaleString('en-IN')} (~$${Math.round(stats.totalLocked / 83)} USDC)`,   color:'#fbbf24', icon:'🔒' },
+          { label:'Funds Released',  val: `₹${stats.totalReleased.toLocaleString('en-IN')} (~$${Math.round(stats.totalReleased / 83)} USDC)`, color:'#34d399', icon:'✅' },
           { label:'Proof Uploads',   val: stats.proofCount,                                  color:'#22d3ee', icon:'📄' },
         ].map(s => (
           <div key={s.label} style={{ borderRadius:'16px', border:'1px solid rgba(255,255,255,0.06)', background:'linear-gradient(145deg,#11142b,#0a0c1a)', padding:'20px', position:'relative', overflow:'hidden' }}>
@@ -358,15 +366,20 @@ export default function Ledger() {
                       </td>
 
                       <td style={{ padding:'16px 24px', fontFamily:'monospace', fontSize:'12px' }}>
-                        {e.hash?.startsWith('0x') ? (
+                        {e.blockchainStatus === 'queued_for_chain_sync' || e.blockchainStatus === 'syncing' ? (
+                          <span style={{ color:'#fbbf24', fontSize:'11px', display:'inline-flex', alignItems:'center', gap:'4px' }}>
+                            <span style={{ width:'8px', height:'8px', border:'1.5px solid rgba(251,191,36,0.3)', borderTopColor:'#fbbf24', borderRadius:'50%', animation:'spin 1s linear infinite', display:'inline-block' }} />
+                            Syncing ⏳
+                          </span>
+                        ) : e.hash?.startsWith('0x') && !e.hash.startsWith('0x3ced06cf') ? (
                           <a href={`https://sepolia.etherscan.io/tx/${e.hash}`} target="_blank" rel="noreferrer"
                             style={{ color:'#a78bfa', textDecoration:'none' }}
                             onMouseOver={ev => ev.target.style.color='#c4b5fd'}
                             onMouseOut={ev  => ev.target.style.color='#a78bfa'}>
-                            {e.hash.slice(0,14)}...
+                            {e.hash.slice(0,8)}...{e.hash.slice(-6)}
                           </a>
                         ) : (
-                          <span style={{ color:'rgba(255,255,255,0.2)' }}>{(e.hash||'').slice(0,14)}...</span>
+                          <span style={{ color:'rgba(255,255,255,0.2)' }}>—</span>
                         )}
                       </td>
                     </tr>

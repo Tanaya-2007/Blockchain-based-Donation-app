@@ -44,6 +44,19 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
   const [bchainStatus,   setBchainStatus]   = useState('queued_for_chain_sync');
   const [bchainTxHash,   setBchainTxHash]   = useState('');
   const [amtErr,         setAmtErr]         = useState('');
+  const [walletAddress,  setWalletAddress]  = useState(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.ethereum) {
+      window.ethereum.request({ method: 'eth_accounts' })
+        .then(accounts => {
+          if (accounts && accounts.length > 0) {
+            setWalletAddress(accounts[0]);
+          }
+        })
+        .catch(err => console.error("Error fetching MetaMask accounts:", err));
+    }
+  }, []);
 
   const campaign  = liveCampaign;
   const raised    = liveCampaign?.raisedAmount  || 0;
@@ -108,6 +121,7 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
       razorpayPaymentId: paymentId       || null,
       razorpayOrderId:   orderId         || null,
       blockchainTxHash:  null,
+      walletAddress:     walletAddress   || null,
       createdAt:         serverTimestamp(),
     });
 
@@ -239,7 +253,7 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
                 // The database is already updated, so the sync will happen later.
               });
 
-              onToast(`✅ ₹${finalAmt.toLocaleString('en-IN')} donated — locked until milestone verified`, 'success');
+              onToast(`✅ ₹${finalAmt.toLocaleString('en-IN')} (~$${(finalAmt / 83).toFixed(2)} USDC) donated — locked until milestone verified`, 'success');
               resolve();
             } catch (e) {
               reject(e);
@@ -301,9 +315,9 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
             {/* Campaign stats */}
             {campaign && remaining > 0 && (
               <div style={{ padding:'10px 14px', borderRadius:'10px', marginBottom:'20px', border:'1px solid rgba(34,211,238,0.25)', background:'rgba(34,211,238,0.06)', fontSize:'12px', color:'#67e8f9', display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:'6px' }}>
-                <span>🎯 Goal: <strong>₹{target.toLocaleString('en-IN')}</strong></span>
-                <span>💰 Raised: <strong>₹{raised.toLocaleString('en-IN')}</strong></span>
-                <span>⏳ Left: <strong>₹{remaining.toLocaleString('en-IN')}</strong></span>
+                <span>🎯 Goal: <strong>₹{target.toLocaleString('en-IN')} (~${Math.round(target / 83)} USDC)</strong></span>
+                <span>💰 Raised: <strong>₹{raised.toLocaleString('en-IN')} (~${Math.round(raised / 83)} USDC)</strong></span>
+                <span>⏳ Left: <strong>₹{remaining.toLocaleString('en-IN')} (~${Math.round(remaining / 83)} USDC)</strong></span>
               </div>
             )}
             {campaign && isGoalMet && (
@@ -315,16 +329,17 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
             {/* Quick amounts */}
             {!isGoalMet && QUICK_AMOUNTS.length > 0 && (
               <>
-                <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:'rgba(255,255,255,0.3)', marginBottom:'10px' }}>Quick Select (₹)</div>
+                <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'1.5px', textTransform:'uppercase', color:'rgba(255,255,255,0.3)', marginBottom:'10px' }}>Quick Select (INR + USDC Equivalent)</div>
                 <div style={{ display:'grid', gridTemplateColumns:`repeat(${QUICK_AMOUNTS.length},1fr)`, gap:'8px', marginBottom:'16px' }}>
                   {QUICK_AMOUNTS.map(a => (
                     <button key={a} onClick={() => { setSelectedAmt(String(a)); setCustom(''); setAmtErr(''); }}
-                      style={{ padding:'11px 0', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:700,
+                      style={{ padding:'11px 0', borderRadius:'10px', cursor:'pointer', fontSize:'12px', fontWeight:700,
                         border:     selectedAmt===String(a)&&!custom ? '1px solid rgba(124,58,237,0.8)' : '1px solid rgba(255,255,255,0.1)',
                         background: selectedAmt===String(a)&&!custom ? 'rgba(124,58,237,0.2)' : 'transparent',
                         color:      selectedAmt===String(a)&&!custom ? '#c4b5fd' : 'rgba(255,255,255,0.45)',
                       }}>
-                      ₹{a.toLocaleString('en-IN')}
+                      ₹{a.toLocaleString('en-IN')}<br/>
+                      <span style={{ fontSize:'10px', opacity:0.75 }}>~${Math.round(a / 83)} USDC</span>
                     </button>
                   ))}
                 </div>
@@ -340,6 +355,11 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
                     type="number" min="1" value={custom}
                     onChange={e => { setCustom(e.target.value); setSelectedAmt(''); }}
                     style={{ ...INP, border: amtErr ? '1px solid rgba(239,68,68,0.6)' : custom ? '1px solid rgba(124,58,237,0.6)' : '1px solid rgba(255,255,255,0.1)' }} />
+                  {custom && !amtErr && (
+                    <div style={{ fontSize:'12px', color:'#22d3ee', marginTop:'6px', fontWeight: 600 }}>
+                      💡 Equivalent to ~${(Number(custom) / 83).toFixed(2)} USDC on-chain
+                    </div>
+                  )}
                 </div>
                 {amtErr && (
                   <div style={{ fontSize:'12px', color:'#f87171', marginBottom:'16px', padding:'8px 12px', borderRadius:'8px', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.25)' }}>
@@ -388,7 +408,7 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
                 ? <><span style={{ width:'16px', height:'16px', border:'2px solid rgba(255,255,255,0.3)', borderTopColor:'#fff', borderRadius:'50%', animation:'spin 0.8s linear infinite', display:'inline-block' }} />Opening payment…</>
                 : isGoalMet    ? '🎉 Goal Reached — Donations Closed'
                 : !user        ? '🔑 Sign in to Donate'
-                : finalAmt > 0 ? `Pay ₹${finalAmt.toLocaleString('en-IN')} via Razorpay`
+                : finalAmt > 0 ? `Pay ₹${finalAmt.toLocaleString('en-IN')} (~$${(finalAmt / 83).toFixed(2)} USDC) via Razorpay`
                 : 'Enter an amount to donate'}
             </button>
           </>
@@ -399,9 +419,22 @@ export default function DonateModal({ campaign: initialCampaign, onClose, onToas
               ✅
             </div>
             <h3 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'22px', fontWeight:800, color:'#fff', marginBottom:'8px' }}>Payment Successful!</h3>
-            <p style={{ color:'rgba(255,255,255,0.4)', fontSize:'13px', marginBottom:'20px' }}>
-              ₹{finalAmt.toLocaleString('en-IN')} locked — releases after AI-verified milestone proof
+            <p style={{ color:'rgba(255,255,255,0.4)', fontSize:'13px', marginBottom:'16px' }}>
+              ₹{finalAmt.toLocaleString('en-IN')} (~${(finalAmt / 83).toFixed(2)} USDC) locked — releases after AI-verified milestone proof
             </p>
+
+            {walletAddress ? (
+              <div style={{ fontSize:'12px', color:'#67e8f9', background:'rgba(34,211,238,0.08)', border:'1px solid rgba(34,211,238,0.25)', padding:'8px 12px', borderRadius:'8px', marginBottom:'20px', lineHeight:1.4 }}>
+                🔗 MetaMask Wallet Connected:<br/>
+                <strong style={{ fontFamily:'monospace', fontSize:'11px' }}>{walletAddress.slice(0, 8)}...{walletAddress.slice(-6)}</strong><br/>
+                <span style={{ fontSize:'10px', opacity:0.8 }}>Any potential campaign refunds will be sent directly to this address.</span>
+              </div>
+            ) : (
+              <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.45)', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.06)', padding:'8px 12px', borderRadius:'8px', marginBottom:'20px', lineHeight:1.4 }}>
+                ℹ️ MetaMask was not connected.<br/>
+                <span style={{ fontSize:'10px', opacity:0.8 }}>Refunds will be managed securely under a platform audit wallet. You can link your wallet later in the Dashboard.</span>
+              </div>
+            )}
 
             {/* Badges container */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px', alignItems: 'center' }}>

@@ -128,9 +128,9 @@ export default function DonorDashboard() {
       {/* ── Donation stats ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '32px' }}>
         {[
-          { label: 'Total Donated', val: `₹${totalDonated.toLocaleString('en-IN')}`, color: '#a78bfa', icon: '💎' },
-          { label: 'Locked (Pending)', val: `₹${totalLocked.toLocaleString('en-IN')}`, color: '#fbbf24', icon: '🔒' },
-          { label: 'Released to NGOs', val: `₹${totalReleased.toLocaleString('en-IN')}`, color: '#34d399', icon: '✅' },
+          { label: 'Total Donated', val: `₹${totalDonated.toLocaleString('en-IN')} (~$${Math.round(totalDonated / 83)} USDC)`, color: '#a78bfa', icon: '💎' },
+          { label: 'Locked (Pending)', val: `₹${totalLocked.toLocaleString('en-IN')} (~$${Math.round(totalLocked / 83)} USDC)`, color: '#fbbf24', icon: '🔒' },
+          { label: 'Released to NGOs', val: `₹${totalReleased.toLocaleString('en-IN')} (~$${Math.round(totalReleased / 83)} USDC)`, color: '#34d399', icon: '✅' },
         ].map(s => (
           <div key={s.label} style={{ borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)', background: 'linear-gradient(145deg, #11142b, #0a0c1a)', padding: '28px', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
             <div style={{ position: 'absolute', top: '-15px', right: '-15px', fontSize: '80px', opacity: 0.04 }}>{s.icon}</div>
@@ -186,8 +186,9 @@ export default function DonorDashboard() {
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: '20px', fontWeight: 800, color: '#22d3ee', marginBottom: '8px' }}>
-                      ₹{(d.amount || 0).toLocaleString('en-IN')}
+                    <div style={{ fontSize: '18px', fontWeight: 800, color: '#22d3ee', marginBottom: '8px' }}>
+                      ₹{(d.amount || 0).toLocaleString('en-IN')}<br/>
+                      <span style={{ fontSize:'12px', opacity:0.75, fontWeight:600 }}>~${Math.round((d.amount || 0) / 83)} USDC</span>
                     </div>
                     {(() => {
                       let statusText = '🔒 Locked';
@@ -196,7 +197,8 @@ export default function DonorDashboard() {
                       let bdr = '1px solid rgba(245,158,11,0.3)';
                       
                       if (d.status === 'refunded') {
-                        statusText = `💸 ${d.refundStatus || 'Refunded'} (₹${d.refundedAmount||0})`;
+                        const refAmt = d.refundedAmount || 0;
+                        statusText = `💸 ${d.refundStatus || 'Refunded'} (₹${refAmt} / ~$${Math.round(refAmt / 83)} USDC)`;
                         bg = 'rgba(239,68,68,0.15)'; col = '#fca5a5'; bdr = '1px solid rgba(239,68,68,0.3)';
                       } else if (camp) {
                         const raised = camp.raisedAmount || 0;

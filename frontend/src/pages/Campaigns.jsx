@@ -128,7 +128,7 @@ function DeadlinePopup({ campaign, onClose, onDonate }) {
         {/* Progress */}
         <div style={{ marginBottom: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'rgba(255,255,255,0.45)', marginBottom: '6px' }}>
-            <span><strong style={{ color: '#fff' }}>₹{raised.toLocaleString('en-IN')}</strong> raised</span>
+            <span><strong style={{ color: '#fff' }}>₹{raised.toLocaleString('en-IN')}</strong> (~${Math.round(raised / 83)} USDC) raised</span>
             <strong style={{ color: pct >= 100 ? '#34d399' : '#fca5a5' }}>{pct}%</strong>
           </div>
           <div style={{ height: '6px', borderRadius: '6px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: '6px' }}>
@@ -140,7 +140,7 @@ function DeadlinePopup({ campaign, onClose, onDonate }) {
           </div>
           {remaining > 0 && (
             <div style={{ fontSize: '11px', color: '#fcd34d', fontWeight: 600 }}>
-              ₹{remaining.toLocaleString('en-IN')} still needed to reach the goal
+              ₹{remaining.toLocaleString('en-IN')} (~${Math.round(remaining / 83)} USDC) still needed to reach the goal
             </div>
           )}
         </div>
@@ -373,7 +373,7 @@ export default function Campaigns({ onDonate }) {
 
                   {/* Progress */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginBottom: '6px' }}>
-                    <span><strong style={{ color: '#fff' }}>₹{raised.toLocaleString('en-IN')}</strong> raised</span>
+                    <span><strong style={{ color: '#fff' }}>₹{raised.toLocaleString('en-IN')}</strong> (~${Math.round(raised / 83)} USDC)</span>
                     <strong style={{ color: pct >= 100 ? '#34d399' : '#fff' }}>{pct}%</strong>
                   </div>
                   <div style={{ height: '4px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', marginBottom: '8px', overflow: 'hidden' }}>
@@ -383,25 +383,25 @@ export default function Campaigns({ onDonate }) {
                   {/* Blockchain Funds Info */}
                   <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'rgba(255,255,255,0.45)', margin: '14px 0', padding: '10px 14px', background: 'rgba(124,58,237,0.05)', borderRadius: '8px', border: '1px solid rgba(124,58,237,0.15)' }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, color: '#fcd34d' }}>₹{locked.toLocaleString('en-IN')}</div>
-                      <div style={{ fontSize: '9px', letterSpacing: '0.5px' }}>LOCKED (CHAIN)</div>
+                      <div style={{ fontWeight: 700, color: '#fcd34d' }}>₹{locked.toLocaleString('en-IN')}<br/><span style={{ fontSize:'9px', opacity:0.75 }}>~${Math.round(locked / 83)} USDC</span></div>
+                      <div style={{ fontSize: '9px', letterSpacing: '0.5px', marginTop: '3px' }}>LOCKED (CHAIN)</div>
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, color: '#6ee7b7' }}>₹{released.toLocaleString('en-IN')}</div>
-                      <div style={{ fontSize: '9px', letterSpacing: '0.5px' }}>RELEASED (CHAIN)</div>
+                      <div style={{ fontWeight: 700, color: '#6ee7b7' }}>₹{released.toLocaleString('en-IN')}<br/><span style={{ fontSize:'9px', opacity:0.75 }}>~${Math.round(released / 83)} USDC</span></div>
+                      <div style={{ fontSize: '9px', letterSpacing: '0.5px', marginTop: '3px' }}>RELEASED (CHAIN)</div>
                     </div>
                   </div>
 
                   {/* Goal + remaining */}
                   <div style={{ marginBottom: '16px' }}>
                     <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginBottom: '3px' }}>
-                      Goal: ₹{target.toLocaleString('en-IN')} · {c.donorCount || 0} donor{c.donorCount !== 1 ? 's' : ''}
+                      Goal: ₹{target.toLocaleString('en-IN')} (~${Math.round(target / 83)} USDC) · {c.donorCount || 0} donor{c.donorCount !== 1 ? 's' : ''}
                     </div>
                     {isGoalMet ? (
                       <div style={{ fontSize: '11px', color: '#34d399', fontWeight: 700 }}>🎉 Goal reached!</div>
                     ) : (
                       <div style={{ fontSize: '11px', color: '#22d3ee', fontWeight: 600 }}>
-                        ₹{remaining.toLocaleString('en-IN')} still needed
+                        ₹{remaining.toLocaleString('en-IN')} (~${Math.round(remaining / 83)} USDC) still needed
                       </div>
                     )}
                   </div>

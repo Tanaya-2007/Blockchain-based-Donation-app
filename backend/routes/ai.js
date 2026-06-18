@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const { verifyDocument } = require('../services/ai/verifier');
 const { db, admin } = require('../firebaseAdmin');
+const { executeOnChainRefund } = require('../services/blockchain');
 const { requireAuth } = require('../middleware/auth');
 const rateLimit = require('express-rate-limit');
 
@@ -213,6 +214,11 @@ router.post('/verify-milestone', requireAuth, aiLimiter, async (req, res) => {
           }
 
           await batch.commit();
+
+          // Trigger on-chain refund asynchronously (does not block HTTP response)
+          executeOnChainRefund(campaignId).catch(err => {
+            console.error('[AI] Async on-chain refund triggering failed:', err);
+          });
         }
       }
     }

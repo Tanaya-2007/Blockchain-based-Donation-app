@@ -237,7 +237,7 @@ export default function ProofUpload({ onToast }) {
     const ms      = selCampaign.currentMilestone || 1;
     const msList  = normalizeMilestones(selCampaign.milestones);
     const msAmt   = msList[ms - 1]?.amount || 0;
-    const context = `Campaign: "${selCampaign.title}" | Milestone ${ms} | Amount: ₹${msAmt.toLocaleString('en-IN')}`;
+    const context = `Campaign: "${selCampaign.title}" | Milestone ${ms} | Amount: ₹${msAmt.toLocaleString('en-IN')} (~$${Math.round(msAmt / 83)} USDC)`;
 
     let aiResult = null;
     let finalStatus = 'pending_retry';
@@ -395,7 +395,7 @@ export default function ProofUpload({ onToast }) {
             <>
               <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.4)', marginBottom:'16px', padding:'10px 14px', borderRadius:'10px', border:'1px solid rgba(255,255,255,0.07)', background:'rgba(124,58,237,0.06)' }}>
                 📋 {selCampaign.title}<br/>
-                Goal: ₹{(selCampaign.targetAmount||0).toLocaleString('en-IN')} · {totalMilestones} milestone{totalMilestones!==1?'s':''}
+                Goal: ₹{(selCampaign.targetAmount||0).toLocaleString('en-IN')} (~${Math.round((selCampaign.targetAmount||0) / 83)} USDC) · {totalMilestones} milestone{totalMilestones!==1?'s':''}
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
                 {safeMilestones.map((m, i) => {
@@ -427,7 +427,7 @@ export default function ProofUpload({ onToast }) {
                         </span>
                       </div>
                       <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.45)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                        <span>₹{amt.toLocaleString('en-IN')}</span>
+                        <span>₹{amt.toLocaleString('en-IN')} (~${Math.round(amt / 83)} USDC)</span>
                         {isCurrent && !blockUpload && <span style={{ color:'#c4b5fd', fontSize:'11px' }}>← Upload proof here</span>}
                         {msNo > currentMsNo && <span style={{ color:'rgba(255,255,255,0.2)', fontSize:'11px' }}>🔒 Locked</span>}
                       </div>
