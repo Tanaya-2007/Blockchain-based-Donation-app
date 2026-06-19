@@ -54,6 +54,33 @@ export default function Dashboard() {
   const [donations,  setDonations]  = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [hoveredPie, setHoveredPie] = useState(null);
+  const [highlightedId, setHighlightedId] = useState(null);
+
+  // Scroll to and highlight campaign card if URL hash is present
+  useEffect(() => {
+    if (loading) return;
+
+    const hash = window.location.hash;
+    if (hash && hash.startsWith('#c-')) {
+      const id = hash.replace('#c-', '');
+      setHighlightedId(id);
+      
+      // Allow DOM to update and render before scrolling
+      setTimeout(() => {
+        const el = document.getElementById(`c-${id}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 300);
+
+      // Clear highligting visual feedback after 3.5 seconds
+      const timer = setTimeout(() => {
+        setHighlightedId(null);
+      }, 3500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
 
   useEffect(() => {
     let mounted = true;
@@ -184,11 +211,11 @@ export default function Dashboard() {
   const fmt = n => `₹${(n || 0).toLocaleString('en-IN')} (~$${Math.round((n || 0) / 83)} USDC)`;
   
   const STATS = [
-    { label: 'Total Donated',        val: fmt(totalDonated),      icon: '💎', color: '#a78bfa' },
-    { label: 'Released to NGO',      val: fmt(totalReleased),     icon: '✅', color: '#34d399' },
-    { label: 'Locked Safety Funds',  val: fmt(totalLocked),       icon: '🔒', color: '#fbbf24' },
-    { label: 'Milestones Completed', val: milestonesCompleted,    icon: '🏆', color: '#22d3ee' },
-    { label: 'Active Donors',        val: activeDonors,           icon: '👥', color: '#f472b6' },
+    { label: 'Total Donated',        val: `₹${totalDonated.toLocaleString('en-IN')}`,      subVal: `~$${Math.round(totalDonated / 83)} USDC`,      icon: '💎', color: '#a78bfa' },
+    { label: 'Released to NGO',      val: `₹${totalReleased.toLocaleString('en-IN')}`,     subVal: `~$${Math.round(totalReleased / 83)} USDC`,     icon: '✅', color: '#34d399' },
+    { label: 'Locked Safety Funds',  val: `₹${totalLocked.toLocaleString('en-IN')}`,       subVal: `~$${Math.round(totalLocked / 83)} USDC`,       icon: '🔒', color: '#fbbf24' },
+    { label: 'Milestones Completed', val: milestonesCompleted.toString(),    icon: '🏆', color: '#22d3ee' },
+    { label: 'Active Donors',        val: activeDonors.toString(),           icon: '👥', color: '#f472b6' },
   ];
 
   return (
@@ -210,21 +237,27 @@ export default function Dashboard() {
       ) : (
         <>
           {/* STAT CARDS */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginBottom: '40px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '40px' }}>
             {STATS.map(s => (
               <div key={s.label} style={{ 
                 borderRadius: '20px', border: '1px solid rgba(255,255,255,0.06)', 
                 background: 'linear-gradient(145deg, #11142b, #0a0c1a)', 
                 padding: '24px', position: 'relative', overflow: 'hidden',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.2)'
+                boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '130px'
               }}>
                 <div style={{ position: 'absolute', top: '-15px', right: '-15px', fontSize: '80px', opacity: 0.04 }}>{s.icon}</div>
-                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginBottom: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginBottom: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>
                   {s.label}
                 </div>
-                <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '32px', fontWeight: 800, color: s.color }}>
+                <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '26px', fontWeight: 800, color: s.color, lineHeight: 1.2 }}>
                   {s.val}
                 </div>
+                {s.subVal && (
+                  <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>
+                    {s.subVal}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -370,11 +403,18 @@ export default function Dashboard() {
                   const target = c.targetAmount || 0;
                   const locked = Math.max(0, raised - released);
 
+                  const isHighlighted = highlightedId === c.id;
+
                   return (
-                    <div key={c.id} style={{
-                      borderRadius: '20px', border: '1px solid rgba(255,255,255,0.06)',
-                      background: '#0a0c1a', padding: '24px', position: 'relative',
-                      overflow: 'hidden'
+                    <div key={c.id} id={`c-${c.id}`} style={{
+                      borderRadius: '20px', 
+                      border: isHighlighted ? '1px solid #7c3aed' : '1px solid rgba(255,255,255,0.06)',
+                      background: '#0a0c1a', 
+                      padding: '24px', 
+                      position: 'relative',
+                      overflow: 'hidden',
+                      boxShadow: isHighlighted ? '0 0 30px rgba(124,58,237,0.3)' : 'none',
+                      transition: 'all 0.5s ease'
                     }}>
                       <div style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: 'rgba(255,255,255,0.3)', marginBottom: '8px' }}>
                         {c.category || 'Campaign'}

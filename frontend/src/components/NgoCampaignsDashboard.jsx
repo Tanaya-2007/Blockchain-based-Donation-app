@@ -186,7 +186,10 @@ export default function NgoCampaignsDashboard({ user }) {
     });
   }, [campaigns, user]);
 
-  const fmt = n => `₹${(n || 0).toLocaleString('en-IN')}`;
+  const fmt = n => `₹${(n || 0).toLocaleString('en-IN')} (~$${Math.round((n || 0) / 83)} USDC)`;
+
+  // Halted campaigns that need immediate deletion warning
+  const haltedCampaigns = enhancedCampaigns.filter(c => c.status === 'Refunded / Halted');
 
   if (loading) return <div style={{ padding: '80px', textAlign: 'center', color: 'rgba(255,255,255,0.4)' }}>Syncing campaigns...</div>;
 
@@ -206,6 +209,22 @@ export default function NgoCampaignsDashboard({ user }) {
           + New Campaign
         </Link>
       </div>
+
+      {/* Halted Warnings banner */}
+      {haltedCampaigns.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+          {haltedCampaigns.map(c => (
+            <div key={c.id} style={{ padding: '16px 20px', borderRadius: '12px', border: '1px solid rgba(245,158,11,0.35)', background: 'rgba(245,158,11,0.08)', color: '#fcd34d', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <span style={{ fontSize: '13.5px', fontWeight: 700 }}>⚠️ Action Required: Campaign Halted</span>
+              <span style={{ fontSize: '12.5px', color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
+                Your campaign <strong>"{c.title}"</strong> has been halted due to a rejected milestone proof. 
+                All locked donor funds have been refunded on-chain. Please delete this campaign. 
+                It will be automatically deleted in <strong>{c.hoursLeft ?? 24} hours</strong>.
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Notifications banner */}
       {notifications.length > 0 && (

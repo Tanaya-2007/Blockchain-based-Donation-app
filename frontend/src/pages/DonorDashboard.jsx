@@ -126,16 +126,17 @@ export default function DonorDashboard() {
       </div>
 
       {/* ── Donation stats ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '32px' }}>
         {[
-          { label: 'Total Donated', val: `₹${totalDonated.toLocaleString('en-IN')} (~$${Math.round(totalDonated / 83)} USDC)`, color: '#a78bfa', icon: '💎' },
-          { label: 'Locked (Pending)', val: `₹${totalLocked.toLocaleString('en-IN')} (~$${Math.round(totalLocked / 83)} USDC)`, color: '#fbbf24', icon: '🔒' },
-          { label: 'Released to NGOs', val: `₹${totalReleased.toLocaleString('en-IN')} (~$${Math.round(totalReleased / 83)} USDC)`, color: '#34d399', icon: '✅' },
+          { label: 'Total Donated', val: `₹${totalDonated.toLocaleString('en-IN')}`, subVal: `~$${Math.round(totalDonated / 83)} USDC`, color: '#a78bfa', icon: '💎' },
+          { label: 'Locked (Pending)', val: `₹${totalLocked.toLocaleString('en-IN')}`, subVal: `~$${Math.round(totalLocked / 83)} USDC`, color: '#fbbf24', icon: '🔒' },
+          { label: 'Released to NGOs', val: `₹${totalReleased.toLocaleString('en-IN')}`, subVal: `~$${Math.round(totalReleased / 83)} USDC`, color: '#34d399', icon: '✅' },
         ].map(s => (
-          <div key={s.label} style={{ borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)', background: 'linear-gradient(145deg, #11142b, #0a0c1a)', padding: '28px', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
+          <div key={s.label} style={{ borderRadius: '24px', border: '1px solid rgba(255,255,255,0.06)', background: 'linear-gradient(145deg, #11142b, #0a0c1a)', padding: '28px', position: 'relative', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '130px' }}>
             <div style={{ position: 'absolute', top: '-15px', right: '-15px', fontSize: '80px', opacity: 0.04 }}>{s.icon}</div>
-            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginBottom: '12px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>{s.label}</div>
-            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '32px', fontWeight: 800, color: s.color }}>{s.val}</div>
+            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginBottom: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px' }}>{s.label}</div>
+            <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '26px', fontWeight: 800, color: s.color, lineHeight: 1.2 }}>{s.val}</div>
+            {s.subVal && <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>{s.subVal}</div>}
           </div>
         ))}
       </div>

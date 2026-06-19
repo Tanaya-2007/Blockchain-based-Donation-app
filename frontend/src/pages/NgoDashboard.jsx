@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { addDoc, collection, getDocs, limit, query, serverTimestamp, where } from 'firebase/firestore';
+import { addDoc, collection, getDocs, limit, query, serverTimestamp, where, onSnapshot, writeBatch, doc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '../auth/useAuth';
 import { db } from '../firebase';
 
@@ -520,6 +520,13 @@ export default function NgoDashboard() {
   const [campaigns, setCampaigns] = useState([]);
   const [totalRaised, setTotalRaised] = useState(0);
 
+  const [proofs, setProofs] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [filter, setFilter] = useState('All');
+  const [search, setSearch] = useState('');
+
+  const initializedHaltedCampaigns = useRef(new Set());
+
   const [form, setForm] = useState({
     orgName: '', orgType: '', regNumber: '', panNumber: '', yearEstablished: '',
     city: '', state: '', website: '', description: '', contactName: '', contactPhone: '',
@@ -559,11 +566,6 @@ export default function NgoDashboard() {
           setStatus('approved');
           const key = `ngo_approved_seen_${user.uid}`;
           if (!localStorage.getItem(key)) { setShowPopup(true); localStorage.setItem(key, '1'); }
-          getDocs(query(collection(db, 'campaigns'), where('ngoId', '==', user.uid))).then(s => {
-            const list = s.docs.map(d => ({ id: d.id, ...d.data() }));
-            setCampaigns(list);
-            setTotalRaised(list.reduce((sum, c) => sum + (c.raisedAmount || 0), 0));
-          });
         } else if (snap.empty) {
           setStatus('none');
         } else {
@@ -583,6 +585,209 @@ export default function NgoDashboard() {
       setStatus(items[0].status || 'pending');
     })();
   }, [user, role, navigate]);
+
+  // Real-time Firestore sync for approved NGOs
+  useEffect(() => {
+    if (!user?.uid || status !== 'approved') return;
+
+    // Real-time listen to this NGO's campaigns
+    const unsubCamps = onSnapshot(
+      query(collection(db, 'campaigns'), where('ngoId', '==', user.uid)),
+      (snap) => {
+        const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setCampaigns(list);
+        setTotalRaised(list.reduce((sum, c) => sum + (c.raisedAmount || 0), 0));
+      },
+      (err) => {
+        console.error("Error listening to campaigns:", err);
+      }
+    );
+
+    // Real-time listen to this NGO's uploaded proofs
+    const unsubProofs = onSnapshot(
+      query(collection(db, 'proofs'), where('ngoId', '==', user.uid)),
+      (snap) => {
+        setProofs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      },
+      (err) => {
+        console.error("Error listening to proofs:", err);
+      }
+    );
+
+    // Real-time listen to this NGO's notifications
+    const unsubNotifs = onSnapshot(
+      query(collection(db, 'notifications'), where('ngoId', '==', user.uid), where('read', '==', false)),
+      (snap) => {
+        setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      },
+      (err) => {
+        console.error("Error listening to notifications:", err);
+      }
+    );
+
+    return () => {
+      unsubCamps();
+      unsubProofs();
+      unsubNotifs();
+    };
+  }, [user?.uid, status]);
+
+  // Auto-delete halted campaigns after 24 hours
+  useEffect(() => {
+    if (!user || campaigns.length === 0) return;
+
+    campaigns.forEach(async (c) => {
+      if (c.status === 'halted_rejected') {
+        if (!c.haltedAt && !initializedHaltedCampaigns.current.has(c.id)) {
+          initializedHaltedCampaigns.current.add(c.id);
+          // If haltedAt is missing, set it to start the 24h timer!
+          try {
+            await updateDoc(doc(db, 'campaigns', c.id), { haltedAt: serverTimestamp() });
+            console.log(`[Auto-Delete] Set missing haltedAt for campaign "${c.title}"`);
+          } catch (err) {
+            console.error("Failed to set missing haltedAt:", err);
+          }
+        } else if (c.haltedAt?.seconds) {
+          const elapsedMs = Date.now() - (c.haltedAt.seconds * 1000);
+          const limitMs = 24 * 60 * 60 * 1000;
+          
+          if (elapsedMs >= limitMs) {
+            console.log(`[Auto-Delete] Halted campaign "${c.title}" is older than 24 hours. Auto-deleting...`);
+            
+            try {
+              const batch = writeBatch(db);
+              
+              // 1. Delete associated proofs
+              const proofSnap = await getDocs(query(collection(db, 'proofs'), where('campaignId', '==', c.id)));
+              proofSnap.docs.forEach(docSnap => batch.delete(docSnap.ref));
+              
+              // 2. Delete associated ledger entries
+              const ledgerSnap = await getDocs(query(collection(db, 'ledger'), where('campaignId', '==', c.id)));
+              ledgerSnap.docs.forEach(docSnap => batch.delete(docSnap.ref));
+              
+              // 3. Delete associated donations
+              const donationsSnap = await getDocs(query(collection(db, 'donations'), where('campaignId', '==', c.id)));
+              donationsSnap.docs.forEach(docSnap => batch.delete(docSnap.ref));
+              
+              // 4. Delete campaign itself
+              batch.delete(doc(db, 'campaigns', c.id));
+              
+              // 5. Add notification warning
+              const notifRef = collection(db, 'notifications');
+              await addDoc(notifRef, {
+                ngoId: user.uid,
+                message: `⚠️ Notice: Campaign "${c.title}" was auto-deleted because you did not delete it within 24 hours of milestone rejection.`,
+                createdAt: serverTimestamp(),
+                read: false
+              });
+              
+              await batch.commit();
+              console.log(`[Auto-Delete] Campaign "${c.title}" successfully auto-deleted.`);
+            } catch (err) {
+              console.error("Auto delete failed for campaign:", c.id, err);
+            }
+          }
+        }
+      }
+    });
+  }, [campaigns, user]);
+
+  // Derived campaign calculations
+  const enhancedCampaigns = useMemo(() => {
+    return campaigns.map(c => {
+      const raised = c.raisedAmount || 0;
+      const target = c.targetAmount || 0;
+      const released = c.releasedFunds || 0;
+      const locked = Math.max(0, raised - released);
+      const remainingTarget = Math.max(0, target - raised);
+      const donors = c.donorCount || 0;
+      
+      const milestones = Array.isArray(c.milestones) ? c.milestones : Object.values(c.milestones || {});
+      const completedMilestones = milestones.filter(m => m.status === 'verified').length;
+      const totalMilestones = milestones.length || 1;
+      const currentMilestoneIdx = c.currentMilestone ? c.currentMilestone - 1 : completedMilestones;
+      const nextMilestone = milestones[currentMilestoneIdx] || null;
+      const nextMilestoneAmt = nextMilestone?.amount || (target / totalMilestones);
+
+      // Find proof status for the CURRENT milestone
+      const activeProof = proofs.find(p => p.campaignId === c.id && p.milestoneNo === currentMilestoneIdx + 1);
+      let proofStatus = 'none'; // none | pending_upload | under_review | rejected
+      
+      if (activeProof) {
+        if (activeProof.status === 'pending_admin_review') proofStatus = 'under_review';
+        else if (activeProof.status === 'rejected') proofStatus = 'rejected';
+      } else if (locked >= nextMilestoneAmt && currentMilestoneIdx < totalMilestones) {
+        proofStatus = 'pending_upload';
+      }
+
+      // Overall Campaign Status
+      let status = 'Active';
+      if (c.status === 'halted_rejected') status = 'Refunded / Halted';
+      else if (completedMilestones >= totalMilestones) status = 'Completed';
+      else if (proofStatus === 'pending_upload') status = 'Needs Proof';
+      else if (proofStatus === 'under_review') status = 'Under Review';
+      else if (locked >= nextMilestoneAmt) status = 'Ready for Release';
+
+      const daysRemaining = c.deadline?.seconds 
+        ? Math.max(0, Math.ceil((c.deadline.seconds * 1000 - Date.now()) / 86400000))
+        : null;
+
+      let hoursLeft = null;
+      if (c.status === 'halted_rejected' && c.haltedAt?.seconds) {
+        const elapsedMs = Date.now() - (c.haltedAt.seconds * 1000);
+        const remainingMs = (24 * 60 * 60 * 1000) - elapsedMs;
+        hoursLeft = Math.max(0, Math.ceil(remainingMs / (60 * 60 * 1000)));
+      }
+
+      return {
+        ...c,
+        raised, target, released, locked, remainingTarget, donors,
+        completedMilestones, totalMilestones, nextMilestoneAmt, currentMilestoneIdx,
+        proofStatus, status, daysRemaining, hoursLeft,
+        milestonesArr: milestones
+      };
+    });
+  }, [campaigns, proofs]);
+
+  // Filtering
+  const filteredCampaigns = useMemo(() => {
+    return enhancedCampaigns.filter(c => {
+      const matchSearch = c.title?.toLowerCase().includes(search.toLowerCase());
+      const matchFilter = filter === 'All' || c.status === filter || (filter === 'Active' && !['Completed', 'Under Review'].includes(c.status));
+      return matchSearch && matchFilter;
+    }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+  }, [enhancedCampaigns, search, filter]);
+
+  const handleDeleteCampaign = async (campaignId, title) => {
+    if (!window.confirm(`Are you sure you want to completely delete "${title}"? This cannot be undone.`)) return;
+    
+    try {
+      const batch = writeBatch(db);
+      
+      // 1. Delete associated proofs
+      const proofSnap = await getDocs(query(collection(db, 'proofs'), where('campaignId', '==', campaignId)));
+      proofSnap.forEach(d => batch.delete(d.ref));
+      
+      // 2. Delete associated ledger entries
+      const ledgerSnap = await getDocs(query(collection(db, 'ledger'), where('campaignId', '==', campaignId)));
+      ledgerSnap.forEach(d => batch.delete(d.ref));
+      
+      // 3. Delete associated donations
+      const donationsSnap = await getDocs(query(collection(db, 'donations'), where('campaignId', '==', campaignId)));
+      donationsSnap.forEach(d => batch.delete(d.ref));
+      
+      // 4. Delete the campaign itself
+      batch.delete(doc(db, 'campaigns', campaignId));
+      
+      await batch.commit();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete campaign: ' + err.message);
+    }
+  };
+
+  const fmt = n => `₹${(n || 0).toLocaleString('en-IN')} (~$${Math.round((n || 0) / 83)} USDC)`;
+  const haltedCampaigns = enhancedCampaigns.filter(c => c.status === 'Refunded / Halted');
 
   /* ── Full submission with verification pipeline ── */
   const handleSubmit = async () => {
@@ -715,50 +920,232 @@ export default function NgoDashboard() {
   if (status === 'approved') return (
     <>
       {showPopup && <ApprovalPopup onClose={() => setShowPopup(false)} />}
-      <div style={{ padding: '40px 48px', maxWidth: '900px' }}>
+      <div style={{ padding: '40px 48px', maxWidth: '1000px', margin: '0 auto' }}>
         <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: '#10b981', marginBottom: '8px' }}>NGO Dashboard</div>
         <h2 style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: '30px', fontWeight: 800, color: '#fff', letterSpacing: '-0.5px', marginBottom: '6px' }}>
           Welcome, {user?.displayName?.split(' ')[0] || 'Organisation'}
         </h2>
         <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', marginBottom: '36px' }}>Manage campaigns, upload milestone proofs, and track fund releases.</p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '16px', marginBottom: '28px' }}>
+        {/* Notifications banner */}
+        {notifications.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+            {notifications.map(n => (
+              <div key={n.id} style={{ padding: '14px 20px', borderRadius: '12px', border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.08)', color: '#fca5a5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 600 }}>{n.message}</span>
+                <button 
+                  onClick={async () => {
+                    try {
+                      await updateDoc(doc(db, 'notifications', n.id), { read: true });
+                    } catch(e) { console.error("Failed to dismiss notification", e); }
+                  }}
+                  style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '14px', cursor: 'pointer', fontWeight: 700 }}
+                >
+                  ✕ Dismiss
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Halted Warnings banner */}
+        {haltedCampaigns.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+            {haltedCampaigns.map(c => (
+              <div key={c.id} style={{ padding: '16px 20px', borderRadius: '12px', border: '1px solid rgba(245,158,11,0.35)', background: 'rgba(245,158,11,0.08)', color: '#fcd34d', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span style={{ fontSize: '13.5px', fontWeight: 700 }}>⚠️ Action Required: Campaign Halted</span>
+                <span style={{ fontSize: '12.5px', color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
+                  Your campaign <strong>"{c.title}"</strong> has been halted due to a rejected milestone proof. 
+                  All locked donor funds have been refunded on-chain. Please delete this campaign. 
+                  It will be automatically deleted in <strong>{c.hoursLeft ?? 24} hours</strong>.
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '28px' }}>
           {[
             { label: 'Active campaigns', val: campaigns.filter(c => c.status === 'active').length.toString(), color: '#a78bfa' },
-            { label: 'Total raised', val: `₹${totalRaised.toLocaleString('en-IN')} (~$${Math.round(totalRaised / 83)} USDC)`, color: '#22d3ee' },
+            { label: 'Total raised', val: `₹${totalRaised.toLocaleString('en-IN')}`, subVal: `~$${Math.round(totalRaised / 83)} USDC`, color: '#22d3ee' },
             { label: 'Total donors', val: campaigns.reduce((s, c) => s + (c.donorCount || 0), 0).toString(), color: '#34d399' },
           ].map(s => (
-            <div key={s.label} style={{ borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', background: '#0d1021', padding: '20px', textAlign: 'center' }}>
-              <div style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: '28px', fontWeight: 800, color: s.color, marginBottom: '4px' }}>{s.val}</div>
-              <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.35)' }}>{s.label}</div>
+            <div key={s.label} style={{ borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', background: '#0d1021', padding: '20px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '110px' }}>
+              <div style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: '26px', fontWeight: 800, color: s.color, marginBottom: '4px', lineHeight: 1.2 }}>{s.val}</div>
+              {s.subVal && <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.4)', marginBottom: '8px' }}>{s.subVal}</div>}
+              <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{s.label}</div>
             </div>
           ))}
         </div>
 
+        {/* Filters & Search */}
         {campaigns.length > 0 && (
-          <div style={{ marginBottom: '28px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.08)', background: '#0d1021', overflow: 'hidden' }}>
-            <div style={{ padding: '16px 24px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontWeight: 700, color: '#fff', fontSize: '14px' }}>My Campaigns</div>
-            {campaigns.map(c => {
-              const raised = c.raisedAmount || 0;
-              const target = c.targetAmount || 0;
-              const remaining = Math.max(0, target - raised);
-              const pct = target ? Math.min(Math.round((raised / target) * 100), 100) : 0;
-              return (
-                <div key={c.id} style={{ padding: '16px 24px', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#fff', marginBottom: '6px' }}>{c.title}</div>
-                    <div style={{ height: '4px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden', marginBottom: '4px' }}>
-                      <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg,#7c3aed,#0891b2)', borderRadius: '4px' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', marginBottom: '28px', flexWrap: 'wrap', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {['All', 'Active', 'Needs Proof', 'Under Review', 'Completed'].map(f => (
+                <button key={f} onClick={() => setFilter(f)} style={{
+                  padding: '8px 20px', borderRadius: '999px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, border: 'none', transition: 'all 0.2s',
+                  background: filter === f ? 'rgba(124,58,237,0.2)' : 'transparent',
+                  color: filter === f ? '#c4b5fd' : 'rgba(255,255,255,0.4)',
+                }}>{f}</button>
+              ))}
+            </div>
+            <input 
+              type="text" placeholder="Search campaign..." value={search} onChange={e => setSearch(e.target.value)}
+              style={{ width: '250px', padding: '10px 16px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.3)', color: '#fff', fontSize: '13px', outline: 'none' }}
+            />
+          </div>
+        )}
+
+        {/* Campaigns Grid */}
+        {campaigns.length > 0 && (
+          <div style={{ marginBottom: '32px' }}>
+            {filteredCampaigns.length === 0 ? (
+              <div style={{ padding: '80px', textAlign: 'center', background: 'rgba(255,255,255,0.02)', borderRadius: '24px', border: '1px dashed rgba(255,255,255,0.1)' }}>
+                <div style={{ fontSize: '40px', marginBottom: '16px', opacity: 0.5 }}>📭</div>
+                <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px' }}>No campaigns found matching your criteria.</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {filteredCampaigns.map(c => (
+                  <div key={c.id} style={{ borderRadius: '20px', border: '1px solid rgba(255,255,255,0.08)', background: 'linear-gradient(145deg, #11142b, #0a0c1a)', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+                    
+                    {/* Card Header */}
+                    <div style={{ padding: '24px 32px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                          <h3 style={{ fontSize: '20px', fontWeight: 700, color: '#fff', margin: 0 }}>{c.title}</h3>
+                          <span style={{ fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.5px', 
+                            background: c.status === 'Refunded / Halted' ? 'rgba(239,68,68,0.15)' : c.status === 'Completed' ? 'rgba(16,185,129,0.15)' : c.status === 'Needs Proof' ? 'rgba(245,158,11,0.15)' : c.status === 'Under Review' ? 'rgba(124,58,237,0.15)' : 'rgba(34,211,238,0.15)',
+                            color: c.status === 'Refunded / Halted' ? '#fca5a5' : c.status === 'Completed' ? '#6ee7b7' : c.status === 'Needs Proof' ? '#fcd34d' : c.status === 'Under Review' ? '#c4b5fd' : '#67e8f9',
+                            border: `1px solid ${c.status === 'Refunded / Halted' ? 'rgba(239,68,68,0.3)' : c.status === 'Completed' ? 'rgba(16,185,129,0.3)' : c.status === 'Needs Proof' ? 'rgba(245,158,11,0.3)' : c.status === 'Under Review' ? 'rgba(124,58,237,0.3)' : 'rgba(34,211,238,0.3)'}`
+                          }}>
+                            {c.status}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', display: 'flex', gap: '16px' }}>
+                          <span>📅 Created: {c.createdAt?.seconds ? new Date(c.createdAt.seconds * 1000).toLocaleDateString() : '—'}</span>
+                          {c.daysRemaining !== null && <span>⏳ {c.daysRemaining} days remaining</span>}
+                          <span>👥 {c.donors} Donors</span>
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>Target Amount</div>
+                        <div style={{ fontSize: '24px', fontWeight: 800, color: '#22d3ee' }}>{fmt(c.target)}</div>
+                      </div>
                     </div>
-                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>₹{remaining.toLocaleString('en-IN')} (~${Math.round(remaining / 83)} USDC) remaining of ₹{target.toLocaleString('en-IN')} (~${Math.round(target / 83)} USDC)</div>
+
+                    {/* Financial Meters */}
+                    <div style={{ padding: '32px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '24px', background: 'rgba(255,255,255,0.01)' }}>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px' }}>
+                          <span style={{ color: 'rgba(255,255,255,0.4)' }}>Total Donated</span>
+                          <span style={{ fontWeight: 700, color: '#a78bfa' }}>{fmt(c.raised)}</span>
+                        </div>
+                        <div style={{ height: '6px', borderRadius: '6px', background: 'rgba(255,255,255,0.06)' }}>
+                          <div style={{ height: '100%', borderRadius: '6px', width: `${Math.min(100, (c.raised / c.target) * 100)}%`, background: '#8b5cf6' }} />
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', marginTop: '8px', textAlign: 'right' }}>{fmt(c.remainingTarget)} needed</div>
+                      </div>
+                      
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px' }}>
+                          <span style={{ color: 'rgba(255,255,255,0.4)' }}>Locked (Safety)</span>
+                          <span style={{ fontWeight: 700, color: '#fbbf24' }}>{fmt(c.locked)}</span>
+                        </div>
+                        <div style={{ height: '6px', borderRadius: '6px', background: 'rgba(255,255,255,0.06)' }}>
+                          <div style={{ height: '100%', borderRadius: '6px', width: `${Math.min(100, (c.locked / c.raised) * 100 || 0)}%`, background: '#f59e0b' }} />
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginBottom: '8px' }}>
+                          <span style={{ color: 'rgba(255,255,255,0.4)' }}>Released to NGO</span>
+                          <span style={{ fontWeight: 700, color: '#10b981' }}>{fmt(c.released)}</span>
+                        </div>
+                        <div style={{ height: '6px', borderRadius: '6px', background: 'rgba(255,255,255,0.06)' }}>
+                          <div style={{ height: '100%', borderRadius: '6px', width: `${Math.min(100, (c.released / c.raised) * 100 || 0)}%`, background: '#10b981' }} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Milestones & Actions */}
+                    <div style={{ padding: '24px 32px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      
+                      {/* Milestone Stepper */}
+                      <div style={{ width: '100%' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
+                          Milestone Progress ({c.completedMilestones}/{c.totalMilestones})
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          {c.milestonesArr.map((m, idx) => {
+                            const isCompleted = m.status === 'verified';
+                            const isCurrent = idx === c.currentMilestoneIdx && c.status !== 'Completed';
+                            return (
+                              <div key={idx} style={{ flex: 1, height: '4px', borderRadius: '4px', background: isCompleted ? '#10b981' : isCurrent ? '#fbbf24' : 'rgba(255,255,255,0.08)', position: 'relative' }}>
+                                {isCurrent && (
+                                  <div style={{ position: 'absolute', top: '12px', left: 0, fontSize: '10px', color: '#fbbf24', whiteSpace: 'nowrap', fontWeight: 700 }}>
+                                    {fmt(m.amount)} Active
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                        {/* Spacing for active milestone text */}
+                        <div style={{ height: '12px' }} />
+                      </div>
+
+                      {/* Smart Actions */}
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', width: '100%', alignItems: 'center' }}>
+                        {c.status === 'Refunded / Halted' ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                            <div style={{ padding: '8px 16px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: '#fca5a5', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                              🚫 Campaign Halted: Milestone Proof Rejected & Funds Refunded
+                            </div>
+                            <div style={{ fontSize: '12.5px', color: '#fbbf24', fontWeight: 600, paddingLeft: '4px', lineHeight: 1.5 }}>
+                              ⚠️ Action Required: Please delete this campaign. It will be automatically deleted in <strong>{c.hoursLeft ?? 24} hours</strong>.
+                            </div>
+                          </div>
+                        ) : c.proofStatus === 'rejected' ? (
+                          <div style={{ padding: '8px 16px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', color: '#fca5a5', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                            ⚠️ Proof Rejected — Re-upload required
+                          </div>
+                        ) : null}
+
+                        <div style={{ display: 'flex', gap: '12px', marginLeft: 'auto', flexWrap: 'wrap', alignItems: 'center' }}>
+                          {c.status !== 'Refunded / Halted' && (c.proofStatus === 'pending_upload' || c.proofStatus === 'rejected') && (
+                            <Link to="/proof" state={{ campaignId: c.id }} style={{ padding: '10px 20px', borderRadius: '10px', background: 'linear-gradient(135deg,#f59e0b,#ea580c)', color: '#fff', fontSize: '13px', fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 12px rgba(245,158,11,0.3)' }}>
+                              📄 Upload Milestone Proof
+                            </Link>
+                          )}
+
+                          {c.proofStatus === 'under_review' && (
+                            <div style={{ padding: '10px 20px', borderRadius: '10px', background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.3)', color: '#c4b5fd', fontSize: '13px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#a78bfa', animation: 'pulse 1.5s infinite' }} /> Admin Review Pending
+                            </div>
+                          )}
+
+                          <Link to={`/transparency#c-${c.id}`} style={{ padding: '10px 20px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '13px', fontWeight: 600, textDecoration: 'none', transition: 'background 0.2s' }}>
+                            View Analytics
+                          </Link>
+                          
+                          {(c.raised === 0 || c.status === 'Refunded / Halted') && (
+                            <button 
+                              onClick={() => handleDeleteCampaign(c.id, c.title)} 
+                              style={{ padding: '10px 20px', borderRadius: '10px', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', fontSize: '13px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                            >
+                              🗑️ Delete Campaign
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                    </div>
                   </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#22d3ee' }}>₹{raised.toLocaleString('en-IN')} (~${Math.round(raised / 83)} USDC)</div>
-                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>{pct}% raised</div>
-                  </div>
-                </div>
-              );
-            })}
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -968,7 +1355,13 @@ export default function NgoDashboard() {
           </button>
         </div>
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse {
+          0%, 100% { opacity: 0.6; }
+          50% { opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }

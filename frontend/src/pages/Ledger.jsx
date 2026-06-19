@@ -266,17 +266,18 @@ export default function Ledger() {
       </div>
 
       {/* Summary Stats */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'16px', marginBottom:'28px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:'16px', marginBottom:'28px' }}>
         {[
-          { label:'Total Donated',   val: `₹${stats.totalDonated.toLocaleString('en-IN')} (~$${Math.round(stats.totalDonated / 83)} USDC)`,  color:'#a78bfa', icon:'💎' },
-          { label:'Funds Locked',    val: `₹${stats.totalLocked.toLocaleString('en-IN')} (~$${Math.round(stats.totalLocked / 83)} USDC)`,   color:'#fbbf24', icon:'🔒' },
-          { label:'Funds Released',  val: `₹${stats.totalReleased.toLocaleString('en-IN')} (~$${Math.round(stats.totalReleased / 83)} USDC)`, color:'#34d399', icon:'✅' },
-          { label:'Proof Uploads',   val: stats.proofCount,                                  color:'#22d3ee', icon:'📄' },
+          { label:'Total Donated',   val: `₹${stats.totalDonated.toLocaleString('en-IN')}`, subVal: `~$${Math.round(stats.totalDonated / 83)} USDC`, color:'#a78bfa', icon:'💎' },
+          { label:'Funds Locked',    val: `₹${stats.totalLocked.toLocaleString('en-IN')}`, subVal: `~$${Math.round(stats.totalLocked / 83)} USDC`, color:'#fbbf24', icon:'🔒' },
+          { label:'Funds Released',  val: `₹${stats.totalReleased.toLocaleString('en-IN')}`, subVal: `~$${Math.round(stats.totalReleased / 83)} USDC`, color:'#34d399', icon:'✅' },
+          { label:'Proof Uploads',   val: stats.proofCount.toString(), color:'#22d3ee', icon:'📄' },
         ].map(s => (
-          <div key={s.label} style={{ borderRadius:'16px', border:'1px solid rgba(255,255,255,0.06)', background:'linear-gradient(145deg,#11142b,#0a0c1a)', padding:'20px', position:'relative', overflow:'hidden' }}>
+          <div key={s.label} style={{ borderRadius:'16px', border:'1px solid rgba(255,255,255,0.06)', background:'linear-gradient(145deg,#11142b,#0a0c1a)', padding:'20px', position:'relative', overflow:'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '110px' }}>
             <div style={{ position:'absolute', top:'-10px', right:'-10px', fontSize:'56px', opacity:0.05 }}>{s.icon}</div>
             <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.4)', fontWeight:700, textTransform:'uppercase', letterSpacing:'1px', marginBottom:'8px' }}>{s.label}</div>
-            <div style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'24px', fontWeight:800, color:s.color }}>{s.val}</div>
+            <div style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:'22px', fontWeight:800, color:s.color, lineHeight: 1.2 }}>{s.val}</div>
+            {s.subVal && <div style={{ fontSize:'12px', color:'rgba(255,255,255,0.4)', marginTop:'4px' }}>{s.subVal}</div>}
           </div>
         ))}
       </div>
