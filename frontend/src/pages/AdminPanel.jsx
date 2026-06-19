@@ -133,12 +133,12 @@ function VerificationBreakdown({ aiVerification, regNumber, orgName }) {
             {riskScore}<span style={{ fontSize:'14px', fontWeight:400 }}>/100</span>
           </div>
           <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.4)', marginTop:'4px' }}>
-            {riskScore >= 65 ? 'Passed AI threshold — admin review required' : 'Failed AI threshold — auto-rejected'}
+            {riskScore >= 75 ? 'Passed AI threshold — admin review required' : 'Failed AI threshold — auto-rejected'}
           </div>
         </div>
         {scoreBreakdown && (
           <div style={{ display:'flex', flexDirection:'column', gap:'4px', fontSize:'11px' }}>
-            <div style={{ color:'rgba(255,255,255,0.5)' }}>AI confidence: <span style={{ color:(scoreBreakdown.aiConfidence||0)>=65?'#6ee7b7':'#fca5a5', fontWeight:700 }}>{scoreBreakdown.aiConfidence ?? aiScore ?? 0}</span>/100</div>
+            <div style={{ color:'rgba(255,255,255,0.5)' }}>AI confidence: <span style={{ color:(scoreBreakdown.aiConfidence||0)>=75?'#6ee7b7':'#fca5a5', fontWeight:700 }}>{scoreBreakdown.aiConfidence ?? aiScore ?? 0}</span>/100</div>
             <div style={{ color:'rgba(255,255,255,0.5)' }}>Format bonus: <span style={{ color:'#a78bfa', fontWeight:700 }}>+{scoreBreakdown.formatBonus||0}</span></div>
             <div style={{ color:'rgba(255,255,255,0.5)' }}>AI decision: <span style={{ color:aiDecision==='manual_review'?'#6ee7b7':'#fca5a5', fontWeight:700 }}>{aiDecision||'—'}</span></div>
           </div>
@@ -204,9 +204,9 @@ function VerificationBreakdown({ aiVerification, regNumber, orgName }) {
             <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
               <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.35)', flexShrink:0 }}>AI confidence:</div>
               <div style={{ height:'5px', borderRadius:'5px', flex:1, background:'rgba(255,255,255,0.08)', overflow:'hidden' }}>
-                <div style={{ height:'100%', width:`${aiScore}%`, borderRadius:'5px', background:aiScore>=65?'#10b981':aiScore>=40?'#f59e0b':'#ef4444' }} />
+                <div style={{ height:'100%', width:`${aiScore}%`, borderRadius:'5px', background:aiScore>=75?'#10b981':aiScore>=40?'#f59e0b':'#ef4444' }} />
               </div>
-              <div style={{ fontSize:'12px', fontWeight:700, color:aiScore>=65?'#6ee7b7':aiScore>=40?'#fcd34d':'#fca5a5', flexShrink:0 }}>{aiScore}%</div>
+              <div style={{ fontSize:'12px', fontWeight:700, color:aiScore>=75?'#6ee7b7':aiScore>=40?'#fcd34d':'#fca5a5', flexShrink:0 }}>{aiScore}%</div>
             </div>
           )}
         </div>
@@ -475,7 +475,7 @@ function NgoRequestsTab() {
   const isAiRejected = r =>
     r.status === 'rejected' &&
     r.aiVerification?.riskScore != null &&
-    r.aiVerification.riskScore < 65;
+    r.aiVerification.riskScore < 75;
 
   /* filtered + sorted list */
   const filtered = requests
@@ -636,7 +636,7 @@ function NgoRequestsTab() {
       {/* AI Rejected notice */}
       {filter === 'ai_rejected' && (
         <div style={{ padding: '16px 20px', borderRadius: '16px', border: '1px solid rgba(239,68,68,0.3)', background: 'linear-gradient(135deg, rgba(239,68,68,0.1), rgba(239,68,68,0.05))', fontSize: '14px', color: '#fca5a5', marginBottom: '24px', lineHeight: 1.6, boxShadow: '0 4px 16px rgba(239,68,68,0.1)' }}>
-          🤖 These submissions were <strong style={{ color: '#fff' }}>automatically rejected</strong> by AI (risk score &lt; 65). Admin can still inspect and manually override by approving after review.
+          🤖 These submissions were <strong style={{ color: '#fff' }}>automatically rejected</strong> by AI (risk score &lt; 75). Admin can still inspect and manually override by approving after review.
         </div>
       )}
 
@@ -1034,9 +1034,9 @@ function ProofsTab() {
               </div>
               {typeof proof.aiScore === 'number' && (
                 <span style={{ fontSize: '12px', fontWeight: 700, padding: '4px 10px', borderRadius: '999px', whiteSpace: 'nowrap',
-                  ...(proof.aiScore>=65 ? {background: 'rgba(245,158,11,0.15)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.3)'} : {background: 'rgba(239,68,68,0.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)'}),
+                  ...(proof.aiScore>=75 ? {background: 'rgba(245,158,11,0.15)', color: '#fcd34d', border: '1px solid rgba(245,158,11,0.3)'} : {background: 'rgba(239,68,68,0.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.3)'}),
                 }}>
-                  {proof.aiScore>=65 ? '🗳️' : '❌'} {proof.aiScore}%
+                  {proof.aiScore>=75 ? '🗳️' : '❌'} {proof.aiScore}%
                 </span>
               )}
               <span style={{ fontSize: '11px', fontWeight: 700, padding: '6px 14px', borderRadius: '999px', whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.5px',
