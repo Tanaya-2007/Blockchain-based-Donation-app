@@ -45,11 +45,6 @@ export default function Navbar({ onDonate }) {
         {/* ── Logo (always left) ── */}
         <button onClick={() => { close(); nav('/'); }}
           style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0, minWidth: 0 }}>
-          <div style={{
-            width: '36px', height: '36px', borderRadius: '10px',
-            background: 'linear-gradient(135deg,#7c3aed,#0891b2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px',
-          }}>💎</div>
           <span style={{ fontFamily: "'Playfair Display',Georgia,serif", fontWeight: 800, fontSize: '18px', color: '#fff', letterSpacing: '-0.3px', whiteSpace: 'nowrap',}}>
             Transparent<span style={{ color: '#8b5cf6' }}>Fund</span>
           </span>

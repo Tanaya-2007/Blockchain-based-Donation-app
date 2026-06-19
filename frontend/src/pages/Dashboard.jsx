@@ -137,11 +137,16 @@ export default function Dashboard() {
   // CORE BUSINESS LOGIC (100% Data Correctness)
   // ────────────────────────────────────────────────────────
   
+  // Filter active campaigns for transparency calculations
+  const activeCampaigns = useMemo(() => {
+    return campaigns.filter(c => c.status !== 'halted_rejected' && c.status !== 'Refunded / Halted');
+  }, [campaigns]);
+
   // 1. totalDonated = sum of all campaign raised amounts
-  const totalDonated = useMemo(() => campaigns.reduce((sum, c) => sum + (c.raisedAmount || 0), 0), [campaigns]);
+  const totalDonated = useMemo(() => activeCampaigns.reduce((sum, c) => sum + (c.raisedAmount || 0), 0), [activeCampaigns]);
   
   // 2. releasedFunds = total amount of approved milestone releases
-  const totalReleased = useMemo(() => campaigns.reduce((sum, c) => sum + (c.releasedFunds || 0), 0), [campaigns]);
+  const totalReleased = useMemo(() => activeCampaigns.reduce((sum, c) => sum + (c.releasedFunds || 0), 0), [activeCampaigns]);
   
   // 3. lockedFunds = strictly totalDonated - releasedFunds
   const totalLocked = Math.max(0, totalDonated - totalReleased);
@@ -149,14 +154,14 @@ export default function Dashboard() {
   // Other stats
   const activeDonors = useMemo(() => new Set(donations.map(d => d.donorId || d.donorEmail)).size, [donations]);
   const milestonesCompleted = useMemo(() => {
-    return campaigns.reduce((count, c) => {
+    return activeCampaigns.reduce((count, c) => {
       if (!c.milestones) return count;
       const verified = Array.isArray(c.milestones) 
         ? c.milestones.filter(m => m.status === 'verified').length
         : Object.values(c.milestones).filter(m => m.status === 'verified').length;
       return count + verified;
     }, 0);
-  }, [campaigns]);
+  }, [activeCampaigns]);
 
   // ────────────────────────────────────────────────────────
   // CHART DATA PREPARATION
@@ -179,7 +184,7 @@ export default function Dashboard() {
   const pieTotal = pieData.reduce((acc, d) => acc + d.value, 0);
 
   const topNGOs = useMemo(() => {
-    return [...campaigns]
+    return [...activeCampaigns]
       .sort((a, b) => (b.releasedFunds || 0) - (a.releasedFunds || 0))
       .slice(0, 5)
       .map(c => ({
@@ -187,12 +192,12 @@ export default function Dashboard() {
         Released: c.releasedFunds || 0,
         Locked: Math.max(0, (c.raisedAmount || 0) - (c.releasedFunds || 0))
       }));
-  }, [campaigns]);
+  }, [activeCampaigns]);
 
   const [filterTab, setFilterTab] = useState('All');
   
   const filteredCampaigns = useMemo(() => {
-    return campaigns.filter(c => {
+    return activeCampaigns.filter(c => {
       const raised = c.raisedAmount || 0;
       const released = c.releasedFunds || 0;
       const locked = Math.max(0, raised - released);
@@ -206,7 +211,7 @@ export default function Dashboard() {
       if (filterTab === 'Pending') return hasPending;
       return true; // 'All'
     });
-  }, [campaigns, filterTab]);
+  }, [activeCampaigns, filterTab]);
 
   const fmt = n => `₹${(n || 0).toLocaleString('en-IN')} (~$${Math.round((n || 0) / 83)} USDC)`;
   

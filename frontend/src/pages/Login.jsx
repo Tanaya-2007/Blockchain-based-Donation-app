@@ -86,14 +86,14 @@ export default function Login() {
 
         <div style={{ textAlign: 'center', marginBottom: '36px' }}>
           <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '8px',
+            display: 'inline-flex', alignItems: 'center',
             padding: '6px 16px', borderRadius: '999px',
             border: '1px solid rgba(124,58,237,0.35)',
             background: 'rgba(124,58,237,0.1)',
             color: '#a78bfa', fontSize: '12px', fontWeight: 600,
             marginBottom: '20px',
           }}>
-            <span>💎</span> TransparentFund
+            TransparentFund
           </div>
           <h1 style={{
             fontFamily: "'Playfair Display', Georgia, serif",

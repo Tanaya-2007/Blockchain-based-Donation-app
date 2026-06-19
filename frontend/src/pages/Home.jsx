@@ -30,7 +30,7 @@ export default function Home() {
 
         {/* Badge */}
         <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: '10px',
+          display: 'inline-flex', alignItems: 'center',
           padding: '8px 20px', borderRadius: '999px',
           border: '1px solid rgba(124,58,237,0.5)',
           background: 'rgba(124,58,237,0.15)',
@@ -39,7 +39,6 @@ export default function Home() {
           boxShadow: '0 0 20px rgba(124,58,237,0.2)',
           backdropFilter: 'blur(10px)'
         }}>
-          <span style={{ fontSize: '14px' }}>💎</span>
           India's first AI-verified donation platform
         </div>
 

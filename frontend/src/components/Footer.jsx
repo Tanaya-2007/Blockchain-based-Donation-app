@@ -188,30 +188,6 @@ export default function Footer() {
           ))}
         </div>
 
-        {/* ── Security badges row ── */}
-        <div style={{
-          display:'flex', flexWrap:'wrap', gap:'10px',
-          justifyContent:'center', marginBottom:'32px',
-        }}>
-          {[
-            { icon:'🔒', text:'256-bit SSL Encrypted' },
-            { icon:'⛓️', text:'Blockchain Immutable' },
-            { icon:'🤖', text:'AI Fraud Detection' },
-            { icon:'💳', text:'RBI Compliant Payments' },
-            { icon:'🛡️', text:'Zero Manual Interference' },
-          ].map(b => (
-            <div key={b.text} style={{
-              display:'inline-flex', alignItems:'center', gap:'7px',
-              padding:'6px 14px', borderRadius:'999px',
-              background:'rgba(255,255,255,0.03)',
-              border:'1px solid rgba(255,255,255,0.08)',
-              fontSize:'12px', color:'rgba(255,255,255,0.35)',
-              fontWeight:500,
-            }}>
-              <span>{b.icon}</span> {b.text}
-            </div>
-          ))}
-        </div>
 
         {/* ── Bottom bar ── */}
         <div style={{

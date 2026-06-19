@@ -527,6 +527,10 @@ export default function NgoDashboard() {
 
   const initializedHaltedCampaigns = useRef(new Set());
 
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [deleteConfirmTitle, setDeleteConfirmTitle] = useState('');
+  const [deleteError, setDeleteError] = useState(null);
+
   const [form, setForm] = useState({
     orgName: '', orgType: '', regNumber: '', panNumber: '', yearEstablished: '',
     city: '', state: '', website: '', description: '', contactName: '', contactPhone: '',
@@ -661,18 +665,10 @@ export default function NgoDashboard() {
               const proofSnap = await getDocs(query(collection(db, 'proofs'), where('campaignId', '==', c.id)));
               proofSnap.docs.forEach(docSnap => batch.delete(docSnap.ref));
               
-              // 2. Delete associated ledger entries
-              const ledgerSnap = await getDocs(query(collection(db, 'ledger'), where('campaignId', '==', c.id)));
-              ledgerSnap.docs.forEach(docSnap => batch.delete(docSnap.ref));
-              
-              // 3. Delete associated donations
-              const donationsSnap = await getDocs(query(collection(db, 'donations'), where('campaignId', '==', c.id)));
-              donationsSnap.docs.forEach(docSnap => batch.delete(docSnap.ref));
-              
-              // 4. Delete campaign itself
+              // 2. Delete campaign itself
               batch.delete(doc(db, 'campaigns', c.id));
               
-              // 5. Add notification warning
+              // 3. Add notification warning
               const notifRef = collection(db, 'notifications');
               await addDoc(notifRef, {
                 ngoId: user.uid,
@@ -759,30 +755,28 @@ export default function NgoDashboard() {
   }, [enhancedCampaigns, search, filter]);
 
   const handleDeleteCampaign = async (campaignId, title) => {
-    if (!window.confirm(`Are you sure you want to completely delete "${title}"? This cannot be undone.`)) return;
-    
+    setDeleteConfirmId(campaignId);
+    setDeleteConfirmTitle(title);
+    setDeleteError(null);
+  };
+
+  const executeDeleteCampaign = async (campaignId) => {
+    setDeleteConfirmId(null);
+    setDeleteError(null);
     try {
       const batch = writeBatch(db);
       
-      // 1. Delete associated proofs
+      // 1. Delete associated proofs (permitted for NGO)
       const proofSnap = await getDocs(query(collection(db, 'proofs'), where('campaignId', '==', campaignId)));
       proofSnap.forEach(d => batch.delete(d.ref));
       
-      // 2. Delete associated ledger entries
-      const ledgerSnap = await getDocs(query(collection(db, 'ledger'), where('campaignId', '==', campaignId)));
-      ledgerSnap.forEach(d => batch.delete(d.ref));
-      
-      // 3. Delete associated donations
-      const donationsSnap = await getDocs(query(collection(db, 'donations'), where('campaignId', '==', campaignId)));
-      donationsSnap.forEach(d => batch.delete(d.ref));
-      
-      // 4. Delete the campaign itself
+      // 2. Delete the campaign itself
       batch.delete(doc(db, 'campaigns', campaignId));
       
       await batch.commit();
     } catch (err) {
       console.error(err);
-      alert('Failed to delete campaign: ' + err.message);
+      setDeleteError(err.message);
     }
   };
 
@@ -926,6 +920,74 @@ export default function NgoDashboard() {
           Welcome, {user?.displayName?.split(' ')[0] || 'Organisation'}
         </h2>
         <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '14px', marginBottom: '36px' }}>Manage campaigns, upload milestone proofs, and track fund releases.</p>
+
+        {/* Delete Error banner */}
+        {deleteError && (
+          <div style={{ padding: '14px 20px', borderRadius: '12px', border: '1px solid rgba(239,68,68,0.35)', background: 'rgba(239,68,68,0.08)', color: '#fca5a5', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600 }}>⚠️ Failed to delete campaign: {deleteError}</span>
+            <button 
+              onClick={() => setDeleteError(null)}
+              style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '14px', cursor: 'pointer', fontWeight: 700 }}
+            >
+              ✕ Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal Overlay */}
+        {deleteConfirmId && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(5, 8, 18, 0.85)', backdropFilter: 'blur(16px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: '20px'
+          }}>
+            <div style={{
+              width: '100%', maxWidth: '480px', borderRadius: '24px',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              background: 'linear-gradient(145deg, #11142b, #0a0c1a)',
+              padding: '32px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>🗑️</div>
+              <h3 style={{ fontFamily: "'Playfair Display',Georgia,serif", fontSize: '22px', fontWeight: 800, color: '#fff', marginBottom: '12px' }}>
+                Delete Campaign?
+              </h3>
+              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '14px', lineHeight: 1.6, marginBottom: '28px' }}>
+                Are you sure you want to completely delete <strong>"{deleteConfirmTitle}"</strong>? This action will permanently remove the campaign and its milestone proofs, and it cannot be undone.
+              </p>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                <button
+                  onClick={() => { setDeleteConfirmId(null); setDeleteConfirmTitle(''); }}
+                  style={{
+                    padding: '11px 24px', borderRadius: '12px',
+                    background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                    color: 'rgba(255,255,255,0.7)', fontWeight: 600, fontSize: '14px',
+                    cursor: 'pointer', transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => executeDeleteCampaign(deleteConfirmId)}
+                  style={{
+                    padding: '11px 24px', borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #ef4444, #b91c1c)', border: 'none',
+                    color: '#fff', fontWeight: 700, fontSize: '14px',
+                    cursor: 'pointer', boxShadow: '0 4px 15px rgba(239,68,68,0.4)',
+                    transition: 'opacity 0.2s'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+                  onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                >
+                  Yes, Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Notifications banner */}
         {notifications.length > 0 && (
