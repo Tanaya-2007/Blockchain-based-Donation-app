@@ -48,7 +48,7 @@ Our AI engine checks:
 ### AI Engine Priority:
 
 1. **Gemini API** (Primary)  
-2. **Claude API** (Fallback)
+2. **Grok API** (Fallback)
 
 ---
 
@@ -138,7 +138,7 @@ Immutable trust layer used for:
 
 - React.js
 - Vite
-- Tailwind CSS
+- Vanilla.css
 - Responsive UI
 
 ## Backend
